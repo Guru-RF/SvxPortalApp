@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.3
+
+- **Fix**: Footer links (QRZ, rf.guru) now open in the system browser instead of trying to open a new Electron window.
+
+---
+
 ## v1.0.0 — Initial Release
 
 First public release of the SVX Portal desktop app.

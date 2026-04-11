@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, Tray, nativeImage, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -95,6 +95,14 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.setMenuBarVisibility(false);
+
+  // Route external links (target="_blank" and window.open) to the system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("http://") || url.startsWith("https://")) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
 
   mainWindow.on("maximize", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
