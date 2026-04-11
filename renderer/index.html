@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>SVX Portal</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+
+    <!-- ── Custom title bar ── -->
+    <div id="titlebar">
+      <div id="titlebar-drag">
+        <span class="titlebar-appname" id="title">SVX Portal</span>
+        <span id="titlebar-status">Connecting&hellip;</span>
+        <span id="status" style="display:none"></span>
+      </div>
+      <div id="titlebar-controls">
+        <button class="tb-btn" id="btn-settings" title="Settings">&#9881;</button>
+        <button class="tb-btn" id="btn-ontop" title="Always on top">&#8902;</button>
+        <button class="tb-btn" id="btn-minimize" title="Minimize">&#8211;</button>
+        <button class="tb-btn" id="btn-maximize" title="Maximize">&#9633;</button>
+        <button class="tb-btn close" id="btn-close" title="Close">&#10005;</button>
+      </div>
+    </div>
+
+    <!-- ── Settings modal ── -->
+    <div id="settings-overlay" class="hidden" role="dialog" aria-modal="true">
+      <div id="settings-modal">
+        <div id="settings-modal-header">
+          <span class="settings-modal-title">Settings</span>
+          <button class="tb-btn close" id="btn-cancel-settings" title="Close">&#10005;</button>
+        </div>
+        <div class="settings-modal-body">
+
+          <!-- Display section -->
+          <div class="settings-section">Display</div>
+
+          <div class="settings-row settings-row-inline">
+            <label>Show</label>
+            <div id="showControls">
+              <label class="check">
+                <input id="showRepeaters" type="checkbox" checked />
+                Repeaters
+              </label>
+              <label class="check">
+                <input id="showHotspots" type="checkbox" checked />
+                Hotspots
+              </label>
+              <label class="check">
+                <input id="activeOnly" type="checkbox" checked />
+                Active only
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row-inline">
+            <label>Window</label>
+            <select id="windowSelect">
+              <option value="3600">1h</option>
+              <option value="21600">6h</option>
+              <option value="43200">12h</option>
+              <option value="86400">1d</option>
+            </select>
+          </div>
+
+          <div class="settings-row settings-row-inline">
+            <label>Map</label>
+            <label class="switch" title="Toggle map">
+              <input id="mapToggle" type="checkbox" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="settings-row settings-row-inline">
+            <label>Dark mode</label>
+            <label class="switch" title="Toggle light/dark">
+              <input id="themeToggle" type="checkbox" />
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <!-- Connection section -->
+          <div class="settings-section">Connection</div>
+
+          <div class="settings-row">
+            <label for="input-ws-url">WebSocket URL</label>
+            <input
+              type="text"
+              id="input-ws-url"
+              placeholder="wss://reflector.be.svx.link/"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="settings-row">
+            <label for="input-app-title">App Title</label>
+            <input
+              type="text"
+              id="input-app-title"
+              placeholder="SVX Portal"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="settings-row">
+            <label for="input-tg-info">TG Info JSON</label>
+            <textarea
+              id="input-tg-info"
+              rows="3"
+              placeholder='{"8":"70cm Repeaters","1745":"Antwerp"}'
+              spellcheck="false"
+            ></textarea>
+          </div>
+          <div class="settings-row">
+            <label for="input-cs-info">Callsign Info JSON</label>
+            <textarea
+              id="input-cs-info"
+              rows="5"
+              placeholder='{"ON0ORA":"TX:438.800\nCTCSS:77Hz"}'
+              spellcheck="false"
+            ></textarea>
+          </div>
+
+        </div>
+        <div class="settings-actions">
+          <button class="btn-ghost" id="btn-restore-defaults">Restore Defaults</button>
+          <button class="btn-primary" id="btn-save-settings">Save &amp; Reconnect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Main content ── -->
+    <main>
+      <div class="tableFrame">
+        <table aria-label="Nodes table">
+          <thead>
+            <tr id="theadRow">
+              <th class="narrow center"></th>
+              <th>Callsign</th>
+              <th>Location</th>
+              <th class="center">&#x1F552;</th>
+              <!-- TG headers injected by JS -->
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div
+        id="map"
+        role="img"
+        aria-label="Map with repeaters and hotspots"
+      ></div>
+    </main>
+
+    <!-- ── Footer ── -->
+    <footer class="site-footer">
+      <div class="footer-row">
+        <span>
+          Concept by
+          <a
+            href="https://www.qrz.com/db/ON8ST"
+            target="_blank"
+            rel="noopener noreferrer"
+            >ON8ST</a
+          >, coded by
+          <a
+            href="https://www.qrz.com/db/ON6URE"
+            target="_blank"
+            rel="noopener noreferrer"
+            >ON6URE</a
+          >, on top of svxreflector by
+          <a
+            href="https://www.qrz.com/db/SM0SVX"
+            target="_blank"
+            rel="noopener noreferrer"
+            >SM0SVX</a
+          >
+        </span>
+        <span>
+          Hosted by
+          <a href="https://rf.guru" target="_blank" rel="noopener noreferrer"
+            >rf.guru</a
+          >
+        </span>
+      </div>
+    </footer>
+
+    <!-- Floating tooltip -->
+    <div id="tooltip" class="hidden" aria-hidden="true"></div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      crossorigin="anonymous"
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

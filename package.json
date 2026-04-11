@@ -1,0 +1,56 @@
+{
+  "name": "svx-portal-app",
+  "version": "1.0.0",
+  "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:win": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.gururf.svx-portal-app",
+    "productName": "SVX Portal",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["arm64", "x64"]
+        }
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "build/icon-512.png"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon-512.png"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "category": "Utility",
+      "icon": "build/icon-512.png"
+    }
+  },
+  "author": "Guru-RF",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

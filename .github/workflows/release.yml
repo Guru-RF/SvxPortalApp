@@ -1,0 +1,58 @@
+name: Build & Release
+
+# Triggers when you push a tag like v1.0.0
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Needed to create the GitHub Release and upload assets
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build — ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            script: build:mac
+            artifacts: dist/*.dmg
+
+          - name: Windows
+            os: windows-latest
+            script: build:win
+            artifacts: dist/*.exe
+
+          - name: Linux
+            os: ubuntu-latest
+            script: build:linux
+            artifacts: dist/*.AppImage
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run ${{ matrix.script }}
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.artifacts }}
+          body_path: RELEASE_NOTES.md
+          draft: false
+          prerelease: false
