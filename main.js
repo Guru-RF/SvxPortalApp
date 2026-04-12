@@ -118,10 +118,14 @@ function createWindow() {
 }
 
 function createTray() {
-  if (process.platform !== "darwin") return;
+  if (process.platform === "linux") return;
   try {
-    let icon = nativeImage.createFromPath(path.join(__dirname, "build", "icon-512.png"));
-    icon = icon.resize({ width: 18, height: 18 });
+    const iconPath = path.join(__dirname, "build", "tray-icon.png");
+    const iconData = fs.readFileSync(iconPath);
+    // 32px PNG displayed as 16pt on Retina (scaleFactor 2)
+    const icon = nativeImage.createFromBuffer(iconData, {
+      width: 16, height: 16, scaleFactor: 2.0,
+    });
     tray = new Tray(icon);
     tray.setToolTip("SVX Portal");
   } catch (e) {
@@ -167,9 +171,22 @@ ipcMain.on("window:maximize", () => {
 });
 ipcMain.on("window:close", () => mainWindow.close());
 
-// macOS menu bar tray ticker
+// Tray ticker — macOS: menu bar text, Windows: balloon notifications
+let prevTalkerText = "";
 ipcMain.on("tray:talkers", (_event, text) => {
   if (!tray) return;
-  tray.setTitle(text || "");
+
+  if (process.platform === "darwin") {
+    tray.setTitle(text || "");
+  }
   tray.setToolTip(text ? `Talking: ${text}` : "SVX Portal");
+
+  if (process.platform === "win32" && text && text !== prevTalkerText) {
+    tray.displayBalloon({
+      title: "SVX Portal",
+      content: `Talking: ${text}`,
+      iconType: "info",
+    });
+  }
+  prevTalkerText = text || "";
 });

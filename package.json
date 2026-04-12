@@ -15,7 +15,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "build/tray-icon.png"
     ],
     "mac": {
       "target": [

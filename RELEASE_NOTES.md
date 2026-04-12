@@ -1,8 +1,10 @@
 # Release Notes
 
-## v1.0.3
+## v1.0.4
 
-- **Fix**: Footer links (QRZ, rf.guru) now open in the system browser instead of trying to open a new Electron window.
+- **macOS**: Tray icon now renders with proper transparency in the menu bar
+- **Windows**: System tray with balloon notifications when talkers change
+- **Fix**: Footer links (QRZ, rf.guru) now open in the system browser instead of trying to open a new Electron window
 
 ---
 
