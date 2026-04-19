@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("api", {
   saveSettings: (s) => ipcRenderer.invoke("settings:save", s),
   getDefaults: () => ipcRenderer.invoke("settings:defaults"),
   updateTrayTalkers: (text) => ipcRenderer.send("tray:talkers", text),
+  setPreferredBleName: (name) => ipcRenderer.send("ble:preferred-name", name),
 
   // Window controls
   minimize: () => ipcRenderer.send("window:minimize"),

@@ -881,6 +881,9 @@ function renderStatus() {
     .map((n) => n.callsign)
     .join(" \u2022 ");
   window.api.updateTrayTalkers(talkerText);
+
+  // Update the BLE bar callsign dot (online/offline of user's configured callsign)
+  refreshCallsignDot();
 }
 
 function chooseTalkTg(node) {
@@ -1245,12 +1248,386 @@ function initSettings() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+// ── BLE HotSpot DTMF / Command client ────────────────────────────────────────
+
+const BLE_SVC_UUID = "6b1d6a10-c50f-4d86-a7f3-7f2a3a1b2c3d";
+const BLE_WRITE_UUID = "6b1d6a11-c50f-4d86-a7f3-7f2a3a1b2c3d";
+const BLE_STATUS_UUID = "6b1d6a12-c50f-4d86-a7f3-7f2a3a1b2c3d";
+const BLE_CMD_UUID = "6b1d6a13-c50f-4d86-a7f3-7f2a3a1b2c3d";
+const CALLSIGN_KEY = "svx-app-callsign";
+const BLE_LAST_DEVICE_KEY = "svx-app-ble-last-device";
+
+function getSavedDeviceName() {
+  try { return localStorage.getItem(BLE_LAST_DEVICE_KEY) || ""; }
+  catch { return ""; }
+}
+function saveDeviceName(name) {
+  if (!name) return;
+  try { localStorage.setItem(BLE_LAST_DEVICE_KEY, name); } catch {}
+  try { window.api.setPreferredBleName?.(name); } catch {}
+}
+
+const ble = {
+  device: null,
+  writeChar: null,
+  statusChar: null,
+  cmdChar: null,
+  userDisconnected: false,
+  reconnectTimer: null,
+  reconnectAttempt: 0,
+  keepaliveTimer: null,
+};
+
+function getUserCallsign() {
+  try { return (localStorage.getItem(CALLSIGN_KEY) || "").toUpperCase().trim(); }
+  catch { return ""; }
+}
+function setUserCallsign(cs) {
+  try { localStorage.setItem(CALLSIGN_KEY, cs.toUpperCase().trim()); } catch {}
+}
+
+function refreshCallsignDot() {
+  const dotEl = document.getElementById("dtmf-callsign-dot");
+  const csEl = document.getElementById("dtmf-callsign");
+  const cs = getUserCallsign();
+  if (csEl) csEl.textContent = cs || "(no callsign set)";
+  if (!dotEl) return;
+  if (!cs) { dotEl.className = ""; return; }
+  const node = state.nodes.get(cs);
+  dotEl.className = node?.online ? "online" : "offline";
+}
+
+function setBleStatus(text, cls) {
+  const el = document.getElementById("ble-status");
+  if (el) {
+    // When idle / disconnected, hint which device we'll reconnect to
+    if (!cls && text === "Not connected") {
+      const saved = getSavedDeviceName();
+      el.textContent = saved ? `Not connected (last: ${saved})` : "Not connected";
+    } else {
+      el.textContent = text;
+    }
+    el.className = cls || "";
+  }
+  const connected = cls === "connected";
+
+  // Title bar quick-reconnect button: show only when disconnected + we have a saved device
+  const quick = document.getElementById("btn-ble-quickconnect");
+  if (quick) {
+    const saved = getSavedDeviceName();
+    quick.style.display = !connected && saved ? "" : "none";
+    quick.title = saved ? `Reconnect to ${saved}` : "Reconnect";
+  }
+
+  // DTMF bar: only visible when connected
+  const bar = document.getElementById("dtmf-bar");
+  if (bar) bar.style.display = connected ? "" : "none";
+
+  // Connect/Disconnect + command row toggles in settings
+  const connectBtn = document.getElementById("btn-ble-connect");
+  const disconnectBtn = document.getElementById("btn-ble-disconnect");
+  const cmdRow = document.getElementById("ble-cmd-row");
+  if (connectBtn) connectBtn.style.display = connected ? "none" : "";
+  if (disconnectBtn) disconnectBtn.style.display = connected ? "" : "none";
+  if (cmdRow) cmdRow.style.display = connected ? "" : "none";
+
+  if (connected) refreshCallsignDot();
+
+  // TG headers become clickable-to-send when BLE is connected
+  document.querySelectorAll("th.tg[data-tg]").forEach((th) => {
+    th.classList.toggle("ble-clickable", connected);
+  });
+}
+
+function setDtmfResponse(text, cls) {
+  const el = document.getElementById("dtmf-response");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = cls || "";
+}
+
+// Build characteristics + subscriptions for an already-connected device.
+async function bleSetupCharacteristics(device) {
+  const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  const service = await server.getPrimaryService(BLE_SVC_UUID);
+  const writeChar = await service.getCharacteristic(BLE_WRITE_UUID);
+  const statusChar = await service.getCharacteristic(BLE_STATUS_UUID);
+
+  let cmdChar = null;
+  try { cmdChar = await service.getCharacteristic(BLE_CMD_UUID); }
+  catch (_) { /* no command char on this device */ }
+
+  await statusChar.startNotifications();
+  statusChar.addEventListener("characteristicvaluechanged", (e) => {
+    const text = new TextDecoder().decode(e.target.value);
+    const isErr = text.startsWith("err");
+    setDtmfResponse(text, isErr ? "bad" : "ok");
+  });
+
+  ble.device = device;
+  ble.writeChar = writeChar;
+  ble.statusChar = statusChar;
+  ble.cmdChar = cmdChar;
+}
+
+function bleClearReconnect() {
+  if (ble.reconnectTimer) {
+    clearTimeout(ble.reconnectTimer);
+    ble.reconnectTimer = null;
+  }
+  ble.reconnectAttempt = 0;
+  ble.reconnecting = false;
+}
+
+function stopKeepalive() {
+  if (ble.keepaliveTimer) {
+    clearInterval(ble.keepaliveTimer);
+    ble.keepaliveTimer = null;
+  }
+}
+
+// Keepalive: every 8s read the status char's CCCD descriptor.
+// This is a real ATT Read Request (not cached browser metadata) — it puts
+// bytes on the BLE link, preventing macOS CoreBluetooth from parking the
+// connection due to inactivity (~15s idle timeout). The server doesn't
+// execute anything — reading a CCCD is purely protocol housekeeping.
+function startKeepalive() {
+  stopKeepalive();
+  ble.keepaliveTimer = setInterval(async () => {
+    const ch = ble.statusChar;
+    const dev = ble.device;
+    if (!dev?.gatt?.connected || !ch) return;
+    try {
+      const cccd = await ch.getDescriptor(
+        "00002902-0000-1000-8000-00805f9b34fb"
+      );
+      await cccd.readValue();
+    } catch (_) {
+      // Connection broke — gattserverdisconnected will trigger the reconnect loop.
+    }
+  }, 8000);
+}
+
+function scheduleReconnect(delayMs) {
+  if (ble.userDisconnected || !ble.device) return;
+  if (ble.reconnectTimer) clearTimeout(ble.reconnectTimer);
+  ble.reconnectTimer = setTimeout(bleTryReconnect, delayMs);
+}
+
+async function bleTryReconnect() {
+  ble.reconnectTimer = null;
+  if (ble.userDisconnected || !ble.device) return;
+  if (ble.reconnecting) return;
+
+  ble.reconnecting = true;
+  ble.reconnectAttempt += 1;
+  const n = ble.reconnectAttempt;
+  setBleStatus("Reconnecting\u2026", "connecting");
+  try {
+    await bleSetupCharacteristics(ble.device);
+    ble.reconnecting = false;
+    ble.reconnectAttempt = 0;
+    if (ble.device.name) saveDeviceName(ble.device.name);
+    setBleStatus(ble.device.name || "Connected", "connected");
+    startKeepalive();
+  } catch (_) {
+    ble.reconnecting = false;
+    // Exponential backoff, capped at 15s. Keep retrying until the user
+    // explicitly disconnects or the hotspot comes back.
+    const delay = Math.min(15000, 1000 * Math.pow(1.6, n - 1));
+    scheduleReconnect(delay);
+  }
+}
+
+// Watchdog: if we think we should be connected but aren't and no reconnect
+// is scheduled/running, revive the loop. Guards against silent state corruption.
+setInterval(() => {
+  if (ble.userDisconnected || !ble.device) return;
+  const connected = !!ble.device.gatt?.connected && !!ble.writeChar;
+  const busy = ble.reconnectTimer || ble.reconnecting;
+  if (!connected && !busy) scheduleReconnect(500);
+}, 15000);
+
+async function bleConnect() {
+  if (!navigator.bluetooth) {
+    setBleStatus("Web Bluetooth not available", "error");
+    return;
+  }
+
+  // Fully tear down any previous state (background auto-reconnect may be running)
+  bleClearReconnect();
+  if (ble.device) {
+    try { if (ble.device.gatt.connected) ble.device.gatt.disconnect(); } catch (_) {}
+    ble.device = null;
+  }
+  ble.writeChar = null;
+  ble.statusChar = null;
+  ble.cmdChar = null;
+  ble.userDisconnected = false;
+
+  try {
+    setBleStatus("Scanning…", "connecting");
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [BLE_SVC_UUID] }],
+    });
+
+    setBleStatus(`Connecting to ${device.name || "device"}…`, "connecting");
+    device.addEventListener("gattserverdisconnected", () => {
+      stopKeepalive();
+      ble.writeChar = null;
+      ble.statusChar = null;
+      ble.cmdChar = null;
+      if (ble.userDisconnected) {
+        ble.device = null;
+        setBleStatus("Not connected", "");
+      } else {
+        // Unexpected drop — keep device ref and retry in background
+        setBleStatus("Connection lost, retrying…", "connecting");
+        scheduleReconnect(1000);
+      }
+    });
+
+    await bleSetupCharacteristics(device);
+    if (device.name) saveDeviceName(device.name);
+    setBleStatus(device.name || "Connected", "connected");
+    startKeepalive();
+  } catch (err) {
+    console.error("BLE connect failed:", err);
+    // Cancellation/timeout is not an error state — leave UI ready for retry
+    const msg = err.message || "Connect failed";
+    const cancelled = /cancel/i.test(msg) || err.name === "NotFoundError";
+    setBleStatus(cancelled ? "Not connected" : msg, cancelled ? "" : "error");
+  }
+}
+
+// Try silently reconnecting to a previously-paired HotSpot on app startup.
+// Uses navigator.bluetooth.getDevices(), which returns devices that have
+// previously been granted permission (requires the permission handler in main.js).
+// Called from main.js on startup with synthetic user gesture so requestDevice()
+// is allowed without a click. Only runs if a device was previously paired.
+async function bleAutoReconnectOnStartup() {
+  if (!getSavedDeviceName()) return;
+  await bleConnect();
+}
+window.bleAutoReconnectOnStartup = bleAutoReconnectOnStartup;
+
+async function bleDisconnect() {
+  ble.userDisconnected = true;
+  bleClearReconnect();
+  stopKeepalive();
+  try {
+    if (ble.device && ble.device.gatt.connected) ble.device.gatt.disconnect();
+  } catch (_) {}
+  ble.device = null;
+  ble.writeChar = null;
+  ble.statusChar = null;
+  ble.cmdChar = null;
+  setBleStatus("Not connected", "");
+}
+
+async function bleSendDTMF(text) {
+  if (!ble.writeChar) return;
+  const trimmed = (text || "").trim();
+  if (!trimmed) return;
+  if (!/^[0-9A-Da-d*#]+$/.test(trimmed)) {
+    setDtmfResponse("Invalid DTMF chars", "bad");
+    return;
+  }
+  try {
+    const bytes = new TextEncoder().encode(trimmed);
+    await ble.writeChar.writeValueWithoutResponse(bytes);
+    setDtmfResponse(`→ ${trimmed}`, "");
+  } catch (err) {
+    console.error("DTMF send failed:", err);
+    setDtmfResponse(err.message || "Send failed", "bad");
+  }
+}
+
+async function bleSendCommand(cmd) {
+  if (!ble.cmdChar) {
+    setDtmfResponse("Command channel not available", "bad");
+    return;
+  }
+  try {
+    const bytes = new TextEncoder().encode(cmd);
+    await ble.cmdChar.writeValue(bytes);
+    setDtmfResponse(`→ ${cmd}`, "");
+  } catch (err) {
+    console.error("Command send failed:", err);
+    setDtmfResponse(err.message || "Command failed", "bad");
+  }
+}
+
+function initBLE() {
+  document.getElementById("btn-ble-connect")?.addEventListener("click", bleConnect);
+  document.getElementById("btn-ble-disconnect")?.addEventListener("click", bleDisconnect);
+  document.getElementById("btn-ble-quickconnect")?.addEventListener("click", bleConnect);
+
+  // Callsign input: load, save on change, refresh dot
+  const csInput = document.getElementById("input-callsign");
+  if (csInput) {
+    csInput.value = getUserCallsign();
+    csInput.addEventListener("input", () => {
+      setUserCallsign(csInput.value);
+      refreshCallsignDot();
+    });
+  }
+
+  // DTMF input + Send
+  const input = document.getElementById("dtmf-input");
+  const send = document.getElementById("dtmf-send");
+  const doSend = () => {
+    if (!input) return;
+    bleSendDTMF(input.value);
+    input.value = "";
+  };
+  send?.addEventListener("click", doSend);
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") doSend();
+  });
+
+  // Quick DTMF buttons in the bar
+  document.querySelectorAll(".dtmf-quick").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const code = btn.getAttribute("data-dtmf");
+      if (code) bleSendDTMF(code);
+    });
+  });
+
+  // Command dropdown in DTMF bar (reboot, svxlink-*, 4g-*, poweroff)
+  const cmdSelect = document.getElementById("ble-cmd-select");
+  cmdSelect?.addEventListener("change", () => {
+    const cmd = cmdSelect.value;
+    if (!cmd) return;
+    if (["reboot", "poweroff"].includes(cmd) && !confirm(`Send "${cmd}" to the hotspot?`)) {
+      cmdSelect.selectedIndex = 0;
+      return;
+    }
+    bleSendCommand(cmd);
+    cmdSelect.selectedIndex = 0;
+  });
+
+  // TG header click → send 91<tg># via DTMF
+  theadRow?.addEventListener("click", (e) => {
+    const th = e.target.closest("th[data-tg]");
+    if (!th || !ble.writeChar) return;
+    bleSendDTMF(`91${th.dataset.tg}#`);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function main() {
   initThemeDefaultDark();
   initMapVisible();
   initMap();
   initTitleBar();
   initSettings();
+  initBLE();
+  try { window.api.setPreferredBleName?.(getSavedDeviceName()); } catch {}
+  // Initial BLE status (auto-reconnect is kicked off from main.js with a
+  // synthetic user gesture after did-finish-load).
+  setBleStatus("Not connected", "");
 
   // Load config from Electron main process (IPC) instead of /config.json
   const cfg = await window.api.loadSettings();

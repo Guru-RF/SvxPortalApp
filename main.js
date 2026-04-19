@@ -4,6 +4,7 @@ const fs = require("fs");
 
 let mainWindow;
 let tray = null;
+let preferredBleName = "";
 
 function getSettingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
@@ -96,12 +97,74 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.setMenuBarVisibility(false);
 
+  // Auto-open DevTools when running unpackaged (i.e. `npm start`)
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
+
+  // Trigger BLE auto-reconnect after page loads, with synthetic user gesture
+  // so navigator.bluetooth.requestDevice() is allowed without a click.
+  mainWindow.webContents.once("did-finish-load", () => {
+    mainWindow.webContents.executeJavaScript(
+      "typeof window.bleAutoReconnectOnStartup === 'function' && window.bleAutoReconnectOnStartup();",
+      true /* userGesture */
+    ).catch(() => {});
+  });
+
   // Route external links (target="_blank" and window.open) to the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http://") || url.startsWith("https://")) {
       shell.openExternal(url);
     }
     return { action: "deny" };
+  });
+
+  // Web Bluetooth device picker — prefer the previously-paired device by name,
+  // otherwise take the first device whose service UUID matched our filter.
+  // If no device appears in 15s we time the scan out so the renderer doesn't
+  // hang forever when the hotspot is off.
+  let bleScanTimeout = null;
+  let bleCurrentCallback = null;
+  const cancelBleScan = (cb) => {
+    if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
+    bleCurrentCallback = null;
+    try { cb(""); } catch (_) {}
+  };
+  mainWindow.webContents.on("select-bluetooth-device", (event, devices, callback) => {
+    event.preventDefault();
+    bleCurrentCallback = callback;
+    const preferred = preferredBleName;
+    const exact = preferred && devices.find((d) => d.deviceName === preferred);
+    if (exact) {
+      if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
+      bleCurrentCallback = null;
+      return callback(exact.deviceId);
+    }
+    if (devices.length > 0 && !preferred) {
+      if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
+      bleCurrentCallback = null;
+      return callback(devices[0].deviceId);
+    }
+    // No match yet — set a timeout if not already set
+    if (!bleScanTimeout) {
+      bleScanTimeout = setTimeout(() => {
+        bleScanTimeout = null;
+        const cb = bleCurrentCallback;
+        bleCurrentCallback = null;
+        if (cb) try { cb(""); } catch (_) {}
+      }, 15000);
+    }
+  });
+
+  // Persist Bluetooth device permissions so navigator.bluetooth.getDevices()
+  // can auto-reconnect on next app launch without re-scanning.
+  mainWindow.webContents.session.setDevicePermissionHandler((details) => {
+    if (details.deviceType === "bluetooth") return true;
+    return false;
+  });
+  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => {
+    if (permission === "bluetooth" || permission === "bluetooth-devices") return true;
+    return false;
   });
 
   mainWindow.on("maximize", () => {
@@ -134,6 +197,16 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
+  // Use our icon in the dock during development (electron-builder handles the
+  // packaged app, but `npm start` shows the default Electron icon otherwise).
+  if (process.platform === "darwin" && app.dock) {
+    try {
+      const dockIcon = nativeImage.createFromPath(
+        path.join(__dirname, "build", "icon-512.png")
+      );
+      if (!dockIcon.isEmpty()) app.dock.setIcon(dockIcon);
+    } catch (_) {}
+  }
   createWindow();
   createTray();
 });
@@ -170,6 +243,11 @@ ipcMain.on("window:maximize", () => {
   else mainWindow.maximize();
 });
 ipcMain.on("window:close", () => mainWindow.close());
+
+// BLE preferred device name (set by renderer from localStorage)
+ipcMain.on("ble:preferred-name", (_event, name) => {
+  preferredBleName = name || "";
+});
 
 // Tray ticker — macOS: menu bar text, Windows: balloon notifications
 let prevTalkerText = "";

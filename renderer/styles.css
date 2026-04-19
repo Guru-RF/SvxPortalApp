@@ -281,6 +281,133 @@ body {
   color: var(--fg);
 }
 
+/* ---------- DTMF bar (BLE HotSpot) — shown only when connected ---------- */
+#dtmf-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+#dtmf-callsign-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: var(--muted);
+  flex-shrink: 0;
+}
+#dtmf-callsign-dot.online {
+  background: var(--ok);
+}
+#dtmf-callsign-dot.offline {
+  background: var(--bad);
+}
+
+#dtmf-callsign {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+#dtmf-input {
+  flex: 1;
+  min-width: 140px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font: 13px/1.4 "Consolas", "SF Mono", "Monaco", monospace;
+  outline: none;
+  user-select: text;
+}
+#dtmf-input:focus {
+  border-color: var(--ok);
+}
+
+#dtmf-send {
+  padding: 4px 14px;
+  font-size: 13px;
+}
+
+.dtmf-quick {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+#ble-cmd-select {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+#ble-cmd-select:hover {
+  color: var(--fg);
+  background: rgba(127, 127, 127, 0.08);
+}
+
+#dtmf-response {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 90px;
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#dtmf-response.ok {
+  color: var(--ok);
+}
+#dtmf-response.bad {
+  color: var(--bad);
+}
+
+/* BLE settings section */
+.ble-controls,
+.ble-commands {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ble-cmd {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+#ble-status {
+  font-size: 13px;
+  color: var(--muted);
+}
+#ble-status.connected {
+  color: var(--ok);
+}
+#ble-status.connecting {
+  color: var(--hotspot);
+}
+#ble-status.error {
+  color: var(--bad);
+}
+
+/* Clickable TG headers when BLE is connected */
+th.tg.ble-clickable {
+  cursor: pointer;
+}
+th.tg.ble-clickable:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+
 /* ---------- Settings section dividers ---------- */
 .settings-section {
   font-size: 11px;

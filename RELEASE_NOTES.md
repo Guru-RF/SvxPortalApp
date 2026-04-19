@@ -1,5 +1,22 @@
 # Release Notes
 
+## v1.0.5
+
+- **New**: Bluetooth LE integration with SVX HotSpot devices
+  - Scan & connect from the Settings panel
+  - Auto-reconnect on startup to the last-paired HotSpot (no clicks needed)
+  - One-click reconnect button in the title bar when disconnected
+  - Callsign input in settings; the online/offline status of your callsign appears live in the DTMF bar
+- **New**: DTMF bar (visible only when BLE-connected)
+  - Type any DTMF sequence (0–9, A–D, *, #) and Send
+  - Quick buttons: **TG** (`9*#`), **Status** (`*#`), **IP** (`D911#`), **Parrot** (`D1#`)
+  - Click any TG column header in the node table to send `91<tg>#` directly
+  - HotSpot commands dropdown: SVXLink start/stop/restart, 4G enable/disable, Reboot, Power Off
+- **Robustness**: keepalive pings the GATT link every 8s to prevent macOS from parking idle connections; automatic exponential-backoff reconnect when the link drops; watchdog revives the loop if it silently stalls
+- **Fix**: App icon now appears correctly in the macOS dock when running from source
+
+---
+
 ## v1.0.4
 
 - **macOS**: Tray icon now renders with proper transparency in the menu bar
