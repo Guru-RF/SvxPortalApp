@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.7
+
+- **Fix**: Native dropdown menus (Commands, Window) now follow the app theme on Windows — dark background with light text in dark mode, instead of unreadable white-on-white.
+
+---
+
 ## v1.0.6
 
 - **macOS builds are now signed and notarized with a Developer ID certificate** — no more Gatekeeper warnings, no more right-click-Open workaround.

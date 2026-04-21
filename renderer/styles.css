@@ -5,6 +5,7 @@
 
 /* ---------- Theme variables ---------- */
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --fg: #0f172a;
   --muted: #64748b;
@@ -29,6 +30,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   --bg: #0b1220;
   --fg: #e6e8ee;
   --muted: #9aa3b2;
