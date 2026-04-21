@@ -1,5 +1,14 @@
 # Release Notes
 
+## v1.0.6
+
+- **macOS builds are now signed and notarized with a Developer ID certificate** — no more Gatekeeper warnings, no more right-click-Open workaround.
+- Bluetooth / network usage descriptions added to Info.plist so macOS shows clear prompts when the app accesses BLE or the network.
+
+Windows and Linux builds remain unsigned in this release.
+
+---
+
 ## v1.0.5
 
 - **New**: Bluetooth LE integration with SVX HotSpot devices

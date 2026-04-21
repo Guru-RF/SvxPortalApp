@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -12,6 +12,7 @@
   "build": {
     "appId": "com.gururf.svx-portal-app",
     "productName": "SVX Portal",
+    "copyright": "Copyright © 2026 RF.Guru",
     "files": [
       "main.js",
       "preload.js",
@@ -26,7 +27,17 @@
         }
       ],
       "category": "public.app-category.utilities",
-      "icon": "build/icon-512.png"
+      "icon": "build/icon-512.png",
+      "identity": "BVBA WeePee (PTFT4U8MF9)",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": true,
+      "extendInfo": {
+        "NSBluetoothAlwaysUsageDescription": "SVX Portal connects to your SVX HotSpot over Bluetooth Low Energy to send DTMF commands and read status.",
+        "NSBluetoothPeripheralUsageDescription": "SVX Portal connects to your SVX HotSpot over Bluetooth Low Energy to send DTMF commands and read status."
+      }
     },
     "win": {
       "target": [

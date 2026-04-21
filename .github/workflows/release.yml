@@ -1,6 +1,6 @@
 name: Build & Release
 
-# Triggers when you push a tag like v1.0.0
+# Push a tag like v1.0.0 to trigger a full release build.
 on:
   push:
     tags:
@@ -27,7 +27,7 @@ jobs:
   # ── Stage 2: build each platform and upload artifacts ─────────────────────
   build:
     name: Build — ${{ matrix.name }}
-    needs: create-release      # wait for the release to exist before uploading
+    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -59,7 +59,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      # macOS: import the Developer ID cert into an ephemeral keychain.
+      - name: Import Developer ID certificate
+        if: matrix.os == 'macos-latest'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.MAC_CERTIFICATE }}
+          p12-password: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+
+      - name: Verify codesigning identity
+        if: matrix.os == 'macos-latest'
+        run: security find-identity -v -p codesigning
+
+      - name: Build macOS (signed + notarized)
+        if: matrix.os == 'macos-latest'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npm run ${{ matrix.script }} -- --publish never
+
+      - name: Build (unsigned)
+        if: matrix.os != 'macos-latest'
         run: npm run ${{ matrix.script }} -- --publish never
 
       - name: Upload artifacts to release
