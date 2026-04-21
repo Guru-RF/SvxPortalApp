@@ -470,6 +470,17 @@ select {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  color-scheme: light dark;
+}
+
+/* Force the select popup to follow the app's theme at all times, so Chromium
+   on Windows doesn't render the native dropdown with the OS default scheme
+   on first open. */
+[data-theme="dark"] select,
+[data-theme="dark"] option {
+  color-scheme: dark;
+  background-color: #1b2538;
+  color: #e6e8ee;
 }
 
 .muted {

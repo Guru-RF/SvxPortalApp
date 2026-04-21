@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.0.8
+
+- **macOS**: App icon now uses a proper multi-resolution `.icns` file — no more gray frame in the dock / Finder.
+- **Windows**: Native dropdown popups now render correctly in dark mode without needing to hover out first (meta color-scheme + explicit dark option styling).
+
+---
+
 ## v1.0.7
 
 - **Fix**: Native dropdown menus (Commands, Window) now follow the app theme on Windows — dark background with light text in dark mode, instead of unreadable white-on-white.

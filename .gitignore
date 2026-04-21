@@ -1,8 +1,42 @@
+# Dependencies & build output
 node_modules/
 dist/
-.DS_Store
+out/
+release/
+
+# Logs & caches
 *.log
+npm-debug.log*
+.cache/
+.parcel-cache/
+
+# OS / editor junk
+.DS_Store
+._*
+Thumbs.db
+*.swp
+*.swo
+*~
+*.bak
+*.orig
+
+# IDE / tool state (not for the repo)
+.vscode/
+.idea/
 .claude/
 .trunk/
+
+# Security — never commit credentials or signing material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+*.cer
+*.certSigningRequest
+
 # Stray root tray icon (the real one lives in build/)
 /tray-icon.png
