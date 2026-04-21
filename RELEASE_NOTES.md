@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.0.9
+
+- **New app icon** — fresh 1024×1024 artwork replaces the old design, with a clean multi-resolution `.icns` for macOS and a matching menu-bar tray icon.
+- Source icon (`/icon.png`) lives in the repo root so future tweaks are a single-file update.
+
+---
+
 ## v1.0.8
 
 - **macOS**: App icon now uses a proper multi-resolution `.icns` file — no more gray frame in the dock / Finder.

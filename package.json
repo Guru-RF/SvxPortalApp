@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -17,7 +17,8 @@
       "main.js",
       "preload.js",
       "renderer/**/*",
-      "build/tray-icon.png"
+      "build/tray-icon.png",
+      "build/icon.png"
     ],
     "mac": {
       "target": [
@@ -46,7 +47,7 @@
           "arch": ["x64"]
         }
       ],
-      "icon": "build/icon-512.png"
+      "icon": "build/icon.png"
     },
     "linux": {
       "target": [
@@ -56,7 +57,7 @@
         }
       ],
       "category": "Utility",
-      "icon": "build/icon-512.png"
+      "icon": "build/icon.png"
     }
   },
   "author": "Guru-RF",
