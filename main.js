@@ -119,42 +119,53 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  // Web Bluetooth device picker — prefer the previously-paired device by name,
-  // otherwise take the first device whose service UUID matched our filter.
-  // If no device appears in 15s we time the scan out so the renderer doesn't
-  // hang forever when the hotspot is off.
+  // Web Bluetooth device picker:
+  //   - If a previously-paired device name matches a discovery, auto-pick it.
+  //   - Otherwise forward the live device list to the renderer so the user
+  //     can choose. Renderer responds via ble:pick-device / ble:cancel-pick.
+  //   - 15s overall scan timeout so the renderer never hangs if no devices
+  //     appear and the user hasn't cancelled.
   let bleScanTimeout = null;
-  let bleCurrentCallback = null;
-  const cancelBleScan = (cb) => {
+  let blePickCallback = null;
+  const finishBleScan = (deviceId) => {
     if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
-    bleCurrentCallback = null;
-    try { cb(""); } catch (_) {}
+    const cb = blePickCallback;
+    blePickCallback = null;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("ble:close-picker");
+    }
+    if (cb) try { cb(deviceId || ""); } catch (_) {}
   };
+
   mainWindow.webContents.on("select-bluetooth-device", (event, devices, callback) => {
     event.preventDefault();
-    bleCurrentCallback = callback;
+    blePickCallback = callback;
+
+    // Auto-pick if we recognize a previously-paired device by name
     const preferred = preferredBleName;
-    const exact = preferred && devices.find((d) => d.deviceName === preferred);
-    if (exact) {
-      if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
-      bleCurrentCallback = null;
-      return callback(exact.deviceId);
+    if (preferred) {
+      const exact = devices.find((d) => d.deviceName === preferred);
+      if (exact) {
+        finishBleScan(exact.deviceId);
+        return;
+      }
     }
-    if (devices.length > 0 && !preferred) {
-      if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
-      bleCurrentCallback = null;
-      return callback(devices[0].deviceId);
-    }
-    // No match yet — set a timeout if not already set
+
+    // Otherwise show the picker in the renderer with the current list
+    const list = devices.map((d) => ({
+      id: d.deviceId,
+      name: d.deviceName || "(unnamed)",
+    }));
+    mainWindow.webContents.send("ble:devices", list);
+
+    // Arm a single overall timeout the first time we see this scan
     if (!bleScanTimeout) {
-      bleScanTimeout = setTimeout(() => {
-        bleScanTimeout = null;
-        const cb = bleCurrentCallback;
-        bleCurrentCallback = null;
-        if (cb) try { cb(""); } catch (_) {}
-      }, 15000);
+      bleScanTimeout = setTimeout(() => finishBleScan(""), 15000);
     }
   });
+
+  ipcMain.on("ble:pick-device", (_event, deviceId) => finishBleScan(deviceId));
+  ipcMain.on("ble:cancel-pick", () => finishBleScan(""));
 
   // Persist Bluetooth device permissions so navigator.bluetooth.getDevices()
   // can auto-reconnect on next app launch without re-scanning.

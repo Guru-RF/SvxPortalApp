@@ -8,6 +8,12 @@ contextBridge.exposeInMainWorld("api", {
   updateTrayTalkers: (text) => ipcRenderer.send("tray:talkers", text),
   setPreferredBleName: (name) => ipcRenderer.send("ble:preferred-name", name),
 
+  // BLE device picker
+  onBleDevices: (cb) => ipcRenderer.on("ble:devices", (_e, list) => cb(list)),
+  onBleClosePicker: (cb) => ipcRenderer.on("ble:close-picker", () => cb()),
+  pickBleDevice: (deviceId) => ipcRenderer.send("ble:pick-device", deviceId),
+  cancelBlePick: () => ipcRenderer.send("ble:cancel-pick"),
+
   // Window controls
   minimize: () => ipcRenderer.send("window:minimize"),
   maximize: () => ipcRenderer.send("window:maximize"),

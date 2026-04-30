@@ -1325,12 +1325,14 @@ function setBleStatus(text, cls) {
   const bar = document.getElementById("dtmf-bar");
   if (bar) bar.style.display = connected ? "" : "none";
 
-  // Connect/Disconnect + command row toggles in settings
+  // Connect/Disconnect/Forget + command row toggles in settings
   const connectBtn = document.getElementById("btn-ble-connect");
   const disconnectBtn = document.getElementById("btn-ble-disconnect");
+  const forgetBtn = document.getElementById("btn-ble-forget");
   const cmdRow = document.getElementById("ble-cmd-row");
   if (connectBtn) connectBtn.style.display = connected ? "none" : "";
   if (disconnectBtn) disconnectBtn.style.display = connected ? "" : "none";
+  if (forgetBtn) forgetBtn.style.display = !connected && getSavedDeviceName() ? "" : "none";
   if (cmdRow) cmdRow.style.display = connected ? "" : "none";
 
   if (connected) refreshCallsignDot();
@@ -1614,10 +1616,58 @@ async function bleSendCommand(cmd) {
   }
 }
 
+// ── BLE device picker (driven from main.js select-bluetooth-device) ─────────
+
+function showBlePicker(devices) {
+  const overlay = document.getElementById("ble-picker-overlay");
+  const list = document.getElementById("ble-picker-list");
+  if (!overlay || !list) return;
+  overlay.classList.remove("hidden");
+  if (!devices || !devices.length) {
+    list.innerHTML = '<span class="muted">Scanning…</span>';
+    return;
+  }
+  list.innerHTML = "";
+  for (const d of devices) {
+    const btn = document.createElement("button");
+    btn.className = "ble-picker-item";
+    btn.innerHTML = `<span><strong>${escapeHtml(d.name)}</strong></span><span class="muted">${escapeHtml(d.id.slice(0, 8))}…</span>`;
+    btn.addEventListener("click", () => {
+      window.api.pickBleDevice(d.id);
+      hideBlePicker();
+    });
+    list.appendChild(btn);
+  }
+}
+
+function hideBlePicker() {
+  document.getElementById("ble-picker-overlay")?.classList.add("hidden");
+}
+
+function bleForgetDevice() {
+  if (!confirm("Forget the saved HotSpot? You'll need to scan and pick it again next time.")) return;
+  try { localStorage.removeItem(BLE_LAST_DEVICE_KEY); } catch {}
+  try { window.api.setPreferredBleName?.(""); } catch {}
+  bleDisconnect();
+}
+
 function initBLE() {
   document.getElementById("btn-ble-connect")?.addEventListener("click", bleConnect);
   document.getElementById("btn-ble-disconnect")?.addEventListener("click", bleDisconnect);
   document.getElementById("btn-ble-quickconnect")?.addEventListener("click", bleConnect);
+  document.getElementById("btn-ble-forget")?.addEventListener("click", bleForgetDevice);
+
+  // Picker modal: cancel buttons + backdrop click
+  const cancel = () => { window.api.cancelBlePick?.(); hideBlePicker(); };
+  document.getElementById("btn-ble-pick-cancel")?.addEventListener("click", cancel);
+  document.getElementById("btn-ble-pick-cancel-2")?.addEventListener("click", cancel);
+  document.getElementById("ble-picker-overlay")?.addEventListener("click", (e) => {
+    if (e.target.id === "ble-picker-overlay") cancel();
+  });
+
+  // Live device list updates from main process
+  window.api.onBleDevices?.((list) => showBlePicker(list));
+  window.api.onBleClosePicker?.(() => hideBlePicker());
 
   // Callsign input: load, save on change, refresh dot
   const csInput = document.getElementById("input-callsign");

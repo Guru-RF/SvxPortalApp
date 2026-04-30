@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.0.11
+
+- **New**: Bluetooth device picker — when more than one HotSpot is in range (or you've never paired before), a modal lists all discovered devices live so you can choose. Saved devices still auto-reconnect with no prompt.
+- **New**: "Forget" button in Settings → Bluetooth — clears the remembered HotSpot so the next scan shows the picker again.
+
+---
+
 ## v1.0.10
 
 - **New**: 4G/LTE signal meter in the DTMF bar — subscribes to the hotspot's BLE feed characteristic and shows live RSSI as a 4-bar gauge. Tooltip reveals the exact dBm reading and label (excellent / good / fair / weak / very poor). Hidden gracefully when the hotspot has no modem or doesn't expose the feed characteristic.

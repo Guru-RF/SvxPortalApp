@@ -416,6 +416,54 @@ body {
   color: var(--bad);
 }
 
+/* BLE device picker modal — same overlay/modal styling as settings */
+#ble-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 8000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#ble-picker-overlay.hidden { display: none; }
+#ble-picker-modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: min(420px, 90vw);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#ble-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ble-picker-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+  text-align: left;
+}
+.ble-picker-item:hover {
+  background: rgba(127, 127, 127, 0.08);
+  border-color: var(--ok);
+}
+.ble-picker-item .muted {
+  font-size: 11px;
+}
+
 /* BLE settings section */
 .ble-controls,
 .ble-commands {

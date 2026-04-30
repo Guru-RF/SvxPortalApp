@@ -100,6 +100,7 @@
             <div class="ble-controls">
               <button class="btn-ghost" id="btn-ble-connect">Scan &amp; Connect</button>
               <button class="btn-ghost" id="btn-ble-disconnect" style="display:none">Disconnect</button>
+              <button class="btn-ghost" id="btn-ble-forget" style="display:none">Forget</button>
             </div>
           </div>
 
@@ -160,6 +161,24 @@
         <div class="settings-actions">
           <button class="btn-ghost" id="btn-restore-defaults">Restore Defaults</button>
           <button class="btn-primary" id="btn-save-settings">Save &amp; Reconnect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Bluetooth device picker modal ── -->
+    <div id="ble-picker-overlay" class="hidden" role="dialog" aria-modal="true">
+      <div id="ble-picker-modal">
+        <div id="settings-modal-header">
+          <span class="settings-modal-title">Choose HotSpot</span>
+          <button class="tb-btn close" id="btn-ble-pick-cancel" title="Cancel">&#10005;</button>
+        </div>
+        <div class="settings-modal-body">
+          <div id="ble-picker-list">
+            <span class="muted">Scanning&hellip;</span>
+          </div>
+        </div>
+        <div class="settings-actions">
+          <button class="btn-ghost" id="btn-ble-pick-cancel-2">Cancel</button>
         </div>
       </div>
     </div>
