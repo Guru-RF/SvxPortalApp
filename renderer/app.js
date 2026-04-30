@@ -1254,6 +1254,7 @@ const BLE_SVC_UUID = "6b1d6a10-c50f-4d86-a7f3-7f2a3a1b2c3d";
 const BLE_WRITE_UUID = "6b1d6a11-c50f-4d86-a7f3-7f2a3a1b2c3d";
 const BLE_STATUS_UUID = "6b1d6a12-c50f-4d86-a7f3-7f2a3a1b2c3d";
 const BLE_CMD_UUID = "6b1d6a13-c50f-4d86-a7f3-7f2a3a1b2c3d";
+const BLE_FEED_UUID = "6b1d6a14-c50f-4d86-a7f3-7f2a3a1b2c3d";
 const CALLSIGN_KEY = "svx-app-callsign";
 const BLE_LAST_DEVICE_KEY = "svx-app-ble-last-device";
 
@@ -1272,6 +1273,7 @@ const ble = {
   writeChar: null,
   statusChar: null,
   cmdChar: null,
+  feedChar: null,
   userDisconnected: false,
   reconnectTimer: null,
   reconnectAttempt: 0,
@@ -1339,6 +1341,37 @@ function setBleStatus(text, cls) {
   });
 }
 
+// 4G/LTE signal meter — fed by the BLE feed characteristic.
+// Buckets per Analog-HotSPOT-SVXLink/BLE.md (modem RSSI, not LTE RSRP):
+//   ≥ −70   excellent (4 bars)
+//   −85..−70 good      (3 bars)
+//   −100..−85 fair     (2 bars)
+//   −110..−100 weak    (1 bar)
+//   <−110   very poor  (1 bar, red tint)
+function updateSignalMeter(sg) {
+  const meter = document.getElementById("signal-meter");
+  if (!meter) return;
+  if (sg === "" || sg == null) {
+    meter.style.display = "none";
+    return;
+  }
+  const dbm = Number(sg);
+  if (!Number.isFinite(dbm)) {
+    meter.style.display = "none";
+    return;
+  }
+  let level, label;
+  if (dbm >= -70) { level = 4; label = "excellent"; }
+  else if (dbm >= -85) { level = 3; label = "good"; }
+  else if (dbm >= -100) { level = 2; label = "fair"; }
+  else if (dbm >= -110) { level = 1; label = "weak"; }
+  else { level = 1; label = "very poor"; }
+  meter.style.display = "";
+  meter.dataset.level = String(level);
+  meter.classList.toggle("very-poor", dbm < -110);
+  meter.title = `4G signal: ${dbm} dBm (${label})`;
+}
+
 function setDtmfResponse(text, cls) {
   const el = document.getElementById("dtmf-response");
   if (!el) return;
@@ -1353,9 +1386,11 @@ async function bleSetupCharacteristics(device) {
   const writeChar = await service.getCharacteristic(BLE_WRITE_UUID);
   const statusChar = await service.getCharacteristic(BLE_STATUS_UUID);
 
+  // Optional characteristics — older hotspots may not expose them
   let cmdChar = null;
-  try { cmdChar = await service.getCharacteristic(BLE_CMD_UUID); }
-  catch (_) { /* no command char on this device */ }
+  try { cmdChar = await service.getCharacteristic(BLE_CMD_UUID); } catch (_) {}
+  let feedChar = null;
+  try { feedChar = await service.getCharacteristic(BLE_FEED_UUID); } catch (_) {}
 
   await statusChar.startNotifications();
   statusChar.addEventListener("characteristicvaluechanged", (e) => {
@@ -1364,10 +1399,27 @@ async function bleSetupCharacteristics(device) {
     setDtmfResponse(text, isErr ? "bad" : "ok");
   });
 
+  if (feedChar) {
+    await feedChar.startNotifications();
+    feedChar.addEventListener("characteristicvaluechanged", (e) => {
+      const text = new TextDecoder().decode(e.target.value);
+      try {
+        const data = JSON.parse(text);
+        updateSignalMeter(data.sg);
+      } catch (_) {
+        // Malformed payload — ignore
+      }
+    });
+  } else {
+    // No feed support → hide the meter
+    updateSignalMeter("");
+  }
+
   ble.device = device;
   ble.writeChar = writeChar;
   ble.statusChar = statusChar;
   ble.cmdChar = cmdChar;
+  ble.feedChar = feedChar;
 }
 
 function bleClearReconnect() {
@@ -1477,6 +1529,8 @@ async function bleConnect() {
       ble.writeChar = null;
       ble.statusChar = null;
       ble.cmdChar = null;
+      ble.feedChar = null;
+      updateSignalMeter("");
       if (ble.userDisconnected) {
         ble.device = null;
         setBleStatus("Not connected", "");
@@ -1522,6 +1576,8 @@ async function bleDisconnect() {
   ble.writeChar = null;
   ble.statusChar = null;
   ble.cmdChar = null;
+  ble.feedChar = null;
+  updateSignalMeter("");
   setBleStatus("Not connected", "");
 }
 

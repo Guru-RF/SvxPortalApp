@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.10
+
+- **New**: 4G/LTE signal meter in the DTMF bar — subscribes to the hotspot's BLE feed characteristic and shows live RSSI as a 4-bar gauge. Tooltip reveals the exact dBm reading and label (excellent / good / fair / weak / very poor). Hidden gracefully when the hotspot has no modem or doesn't expose the feed characteristic.
+
+---
+
 ## v1.0.9
 
 - **New app icon** — fresh 1024×1024 artwork replaces the old design, with a clean multi-resolution `.icns` for macOS and a matching menu-bar tray icon.
