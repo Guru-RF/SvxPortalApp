@@ -29,7 +29,8 @@ Pre-built binaries are available on the [Releases](../../releases) page.
 
 | Platform | Format |
 | --- | --- |
-| macOS (Apple Silicon + Intel) | `.dmg` (universal) |
+| macOS (Apple Silicon, M1/M2/M3/M4) | `…-AppleSilicon.dmg` |
+| macOS (Intel) | `…-Intel.dmg` |
 | Windows | `.exe` (NSIS installer, x64) |
 | Linux | `.AppImage` (x64 + ARM64) |
 

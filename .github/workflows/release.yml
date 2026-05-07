@@ -79,6 +79,23 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run ${{ matrix.script }} -- --publish never
 
+      - name: Rename macOS DMGs to user-friendly names
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          cd dist
+          for f in *-arm64.dmg; do
+            [ -f "$f" ] || continue
+            mv -- "$f" "${f//-arm64/-AppleSilicon}"
+          done
+          for f in *-x64.dmg; do
+            [ -f "$f" ] || continue
+            mv -- "$f" "${f//-x64/-Intel}"
+          done
+          # Drop blockmaps — only used by electron-updater, which we don't ship
+          rm -f *.blockmap
+          ls -la
+
       - name: Build (unsigned)
         if: matrix.os != 'macos-latest'
         run: npm run ${{ matrix.script }} -- --publish never
