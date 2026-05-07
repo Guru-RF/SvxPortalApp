@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.12
+
+- **macOS**: DMGs are now clearly labelled — `…-AppleSilicon.dmg` for M1/M2/M3/M4 Macs and `…-Intel.dmg` for older Intel Macs. No more guessing which file to grab.
+
+---
+
 ## v1.0.11
 
 - **New**: Bluetooth device picker — when more than one HotSpot is in range (or you've never paired before), a modal lists all discovered devices live so you can choose. Saved devices still auto-reconnect with no prompt.
