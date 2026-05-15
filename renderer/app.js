@@ -11,10 +11,21 @@
  *  - Settings panel lets user change WS URL / title / TG info / callsign info in-app
  */
 
-const TG_LIST = [
+// Dynamic — replaced from state.tgInfo keys whenever talkgroup info loads
+// (applyConfig + refreshPortalInfo). Initial seed is kept only so the table
+// renders something sane before the first config arrives.
+let TG_LIST = [
   4, 6, 8, 23, 40, 50, 51, 52, 53, 54, 55, 58, 60, 1745, 1785, 2300, 2990,
   8400, 8401, 9000,
 ];
+
+function rebuildTgList() {
+  const tgs = Object.keys(state.tgInfo || {})
+    .map((k) => Number(k))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+  if (tgs.length) TG_LIST = tgs;
+}
 
 // Belgium bounds (default)
 const BE_SW = [49.48, 2.54];
@@ -104,6 +115,8 @@ const inputWsUrl = document.getElementById("input-ws-url");
 const inputAppTitle = document.getElementById("input-app-title");
 const inputTgInfo = document.getElementById("input-tg-info");
 const inputCsInfo = document.getElementById("input-cs-info");
+const inputPortalUrl = document.getElementById("input-portal-url");
+const inputAutoUpdateInfo = document.getElementById("input-auto-update-info");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -887,11 +900,14 @@ function renderStatus() {
 }
 
 function chooseTalkTg(node) {
+  if (!node.isTalker) return 0;
+  // Prefer the active tg even when it's not in TG_LIST — the row renderer
+  // collapses unknown TGs into a "TG <num>" balloon.
   const tg = Number(node.tg || 0);
-  if (node.isTalker && tg && TG_LIST.includes(tg)) return tg;
-  if (node.isTalker && Array.isArray(node.monitoredTGs) && node.monitoredTGs.length) {
+  if (tg) return tg;
+  if (Array.isArray(node.monitoredTGs) && node.monitoredTGs.length) {
     const first = Number(node.monitoredTGs[0]);
-    if (TG_LIST.includes(first)) return first;
+    if (Number.isFinite(first) && first > 0) return first;
   }
   return 0;
 }
@@ -945,14 +961,22 @@ function renderTable() {
 
       const monitored = Array.isArray(n.monitoredTGs) ? n.monitoredTGs : [];
       const talkTg = chooseTalkTg(n);
+      const talkTgInList = !!talkTg && TG_LIST.includes(talkTg);
 
-      const tgCells = TG_LIST.map((tg) => {
-        if (n.isTalker && talkTg === tg)
-          return `<td class="tg"><span class="tgTalkDot"></span></td>`;
-        if (monitored.includes(tg))
-          return `<td class="tg"><span class="tgCheck">&#10003;</span></td>`;
-        return `<td class="tg"></td>`;
-      }).join("");
+      let tgCells;
+      if (n.isTalker && talkTg && !talkTgInList) {
+        // Talker is on a TG that isn't in our configured list — collapse the
+        // matrix into a single balloon cell.
+        tgCells = `<td class="tg tgOther" colspan="${TG_LIST.length}"><span class="tgTalkDot"></span><span class="tgOtherLabel">TG ${escapeHtml(String(talkTg))}</span></td>`;
+      } else {
+        tgCells = TG_LIST.map((tg) => {
+          if (n.isTalker && talkTg === tg)
+            return `<td class="tg"><span class="tgTalkDot"></span></td>`;
+          if (monitored.includes(tg))
+            return `<td class="tg"><span class="tgCheck">&#10003;</span></td>`;
+          return `<td class="tg"></td>`;
+        }).join("");
+      }
 
       const loc = formatLocation(n.location || "");
       const mDotText = n.isTalker && talkTg ? String(talkTg) : "";
@@ -1130,6 +1154,53 @@ function applyConfig(cfg) {
   if (titleEl && cfg.title) titleEl.textContent = cfg.title;
   state.tgInfo = normalizeTgInfo(cfg.talkgroupInfo || {});
   state.csInfo = normalizeCsInfo(cfg.callsignInfo || {});
+  rebuildTgList();
+  // Kick off a portal fetch in the background — overrides the in-memory
+  // tgInfo / csInfo when it returns, leaving settings.json untouched.
+  if (cfg.autoUpdateInfo !== false && cfg.portalUrl) {
+    refreshPortalInfo();
+  }
+}
+
+// ── Portal auto-update (talkgroups.json + callsigns.json) ─────────────────
+
+const PORTAL_REFRESH_MS = 8 * 60 * 60 * 1000; // 8 hours
+let portalRefreshTimer = null;
+
+async function fetchPortalInfo(portalUrl) {
+  if (!portalUrl) return null;
+  const base = portalUrl.replace(/\/+$/, "");
+  try {
+    const [tgRes, csRes] = await Promise.all([
+      fetch(`${base}/talkgroups.json`, { cache: "no-store" }),
+      fetch(`${base}/callsigns.json`, { cache: "no-store" }),
+    ]);
+    if (!tgRes.ok) throw new Error(`talkgroups.json HTTP ${tgRes.status}`);
+    if (!csRes.ok) throw new Error(`callsigns.json HTTP ${csRes.status}`);
+    const tg = await tgRes.json();
+    const cs = await csRes.json();
+    return { tg, cs };
+  } catch (err) {
+    console.warn("Portal info fetch failed:", err.message);
+    return null;
+  }
+}
+
+async function refreshPortalInfo() {
+  const cfg = state.cfg;
+  if (!cfg?.autoUpdateInfo || !cfg.portalUrl) return;
+  const data = await fetchPortalInfo(cfg.portalUrl);
+  if (!data) return;
+  state.tgInfo = normalizeTgInfo(data.tg || {});
+  state.csInfo = normalizeCsInfo(data.cs || {});
+  rebuildTgList();
+  buildTgHeader();
+  renderAll();
+}
+
+function startPortalAutoUpdate() {
+  if (portalRefreshTimer) clearInterval(portalRefreshTimer);
+  portalRefreshTimer = setInterval(refreshPortalInfo, PORTAL_REFRESH_MS);
 }
 
 // ── Title bar controls ────────────────────────────────────────────────────────
@@ -1168,6 +1239,8 @@ function openSettings() {
   const cfg = state.cfg || {};
   if (inputWsUrl) inputWsUrl.value = cfg.wsUrl || "";
   if (inputAppTitle) inputAppTitle.value = cfg.title || "";
+  if (inputPortalUrl) inputPortalUrl.value = cfg.portalUrl || "";
+  if (inputAutoUpdateInfo) inputAutoUpdateInfo.checked = cfg.autoUpdateInfo !== false;
   if (inputTgInfo) {
     const tg = cfg.talkgroupInfo;
     inputTgInfo.value = tg && Object.keys(tg).length ? JSON.stringify(tg, null, 2) : "";
@@ -1176,9 +1249,19 @@ function openSettings() {
     const cs = cfg.callsignInfo;
     inputCsInfo.value = cs && Object.keys(cs).length ? JSON.stringify(cs, null, 2) : "";
   }
+  updateInfoEditableState();
 
   settingsPanelEl.classList.remove("hidden");
   inputWsUrl?.focus();
+}
+
+// Grey out the TG / Callsign textareas when auto-update is on — the portal
+// will overwrite the in-memory values, so editing them in settings has no
+// effect until auto-update is turned off.
+function updateInfoEditableState() {
+  const enabled = !inputAutoUpdateInfo?.checked;
+  if (inputTgInfo) inputTgInfo.disabled = !enabled;
+  if (inputCsInfo) inputCsInfo.disabled = !enabled;
 }
 
 function closeSettings() {
@@ -1202,11 +1285,17 @@ function initSettings() {
     const defaults = await window.api.getDefaults();
     if (inputWsUrl) inputWsUrl.value = defaults.wsUrl || "";
     if (inputAppTitle) inputAppTitle.value = defaults.title || "";
+    if (inputPortalUrl) inputPortalUrl.value = defaults.portalUrl || "";
+    if (inputAutoUpdateInfo) inputAutoUpdateInfo.checked = defaults.autoUpdateInfo !== false;
     if (inputTgInfo) inputTgInfo.value = defaults.talkgroupInfo && Object.keys(defaults.talkgroupInfo).length
       ? JSON.stringify(defaults.talkgroupInfo, null, 2) : "";
     if (inputCsInfo) inputCsInfo.value = defaults.callsignInfo && Object.keys(defaults.callsignInfo).length
       ? JSON.stringify(defaults.callsignInfo, null, 2) : "";
+    updateInfoEditableState();
   });
+
+  // Live-update the grey-out state when the user toggles the checkbox
+  inputAutoUpdateInfo?.addEventListener("change", updateInfoEditableState);
 
   document.getElementById("btn-save-settings")?.addEventListener("click", async () => {
     const wsUrl = (inputWsUrl?.value || "").trim() || "wss://reflector.be.svx.link/";
@@ -1230,7 +1319,10 @@ function initSettings() {
       return;
     }
 
-    const newCfg = { wsUrl, title, talkgroupInfo, callsignInfo };
+    const portalUrl = (inputPortalUrl?.value || "").trim() || "https://portal.be.svx.link/";
+    const autoUpdateInfo = !!inputAutoUpdateInfo?.checked;
+
+    const newCfg = { wsUrl, title, portalUrl, autoUpdateInfo, talkgroupInfo, callsignInfo };
     await window.api.saveSettings(newCfg);
 
     applyConfig(newCfg);
@@ -1738,6 +1830,7 @@ async function main() {
   // Load config from Electron main process (IPC) instead of /config.json
   const cfg = await window.api.loadSettings();
   applyConfig(cfg);
+  startPortalAutoUpdate();
 
   restoreUiPrefs();
   buildTgHeader();

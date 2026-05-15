@@ -139,6 +139,23 @@
             />
           </div>
           <div class="settings-row">
+            <label for="input-portal-url">Portal URL</label>
+            <input
+              type="text"
+              id="input-portal-url"
+              placeholder="https://portal.be.svx.link/"
+              spellcheck="false"
+              autocomplete="off"
+            />
+          </div>
+          <div class="settings-row settings-row-inline">
+            <label>Auto-update</label>
+            <label class="check">
+              <input id="input-auto-update-info" type="checkbox" checked />
+              Fetch TG &amp; Callsign info on start and every 8 hours
+            </label>
+          </div>
+          <div class="settings-row">
             <label for="input-tg-info">TG Info JSON</label>
             <textarea
               id="input-tg-info"

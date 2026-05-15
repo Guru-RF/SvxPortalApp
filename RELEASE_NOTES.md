@@ -1,5 +1,12 @@
 # Release Notes
 
+## v1.0.13
+
+- **New**: Auto-update TG / Callsign info from a configurable Portal URL (default `https://portal.be.svx.link/`). Fetches `talkgroups.json` + `callsigns.json` on launch and every 8 hours; the manual JSON textareas grey out while auto-update is on.
+- **Improved**: Talkgroup matrix now only shows configured TGs (matching the online portal). When a talker is on an undefined TG, the row collapses into a single "TG &lt;number&gt;" balloon instead of showing nothing.
+
+---
+
 ## v1.0.12
 
 - **macOS**: DMGs are now clearly labelled — `…-AppleSilicon.dmg` for M1/M2/M3/M4 Macs and `…-Intel.dmg` for older Intel Macs. No more guessing which file to grab.

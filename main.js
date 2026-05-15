@@ -15,6 +15,8 @@ function getSettingsPath() {
 const DEFAULT_SETTINGS = {
   wsUrl: "wss://reflector.be.svx.link/",
   title: "SVX Reflector \u2022 Live",
+  portalUrl: "https://portal.be.svx.link/",
+  autoUpdateInfo: true,
   talkgroupInfo: {
     "4": "4m Repeaters",
     "6": "6m Repeaters",
