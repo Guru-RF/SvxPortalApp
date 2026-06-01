@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -27,7 +27,7 @@
           "arch": ["arm64", "x64"]
         }
       ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "artifactName": "${productName}-${arch}.${ext}",
       "category": "public.app-category.utilities",
       "icon": "build/icon.icns",
       "identity": "BVBA WeePee (PTFT4U8MF9)",
@@ -48,6 +48,7 @@
           "arch": ["x64"]
         }
       ],
+      "artifactName": "${productName} Setup.${ext}",
       "icon": "build/icon.png"
     },
     "linux": {
@@ -57,6 +58,7 @@
           "arch": ["x64", "arm64"]
         }
       ],
+      "artifactName": "${productName}-${arch}.${ext}",
       "category": "Utility",
       "icon": "build/icon.png"
     }

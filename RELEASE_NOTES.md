@@ -1,5 +1,16 @@
 # Release Notes
 
+## v1.0.14
+
+- **Build**: dropped version numbers from output filenames so release assets have stable, easy-to-mirror URLs:
+  - `SVX Portal-AppleSilicon.dmg`
+  - `SVX Portal-Intel.dmg`
+  - `SVX Portal Setup.exe`
+  - `SVX Portal-x64.AppImage`
+  - `SVX Portal-arm64.AppImage`
+
+---
+
 ## v1.0.13
 
 - **New**: Auto-update TG / Callsign info from a configurable Portal URL (default `https://portal.be.svx.link/`). Fetches `talkgroups.json` + `callsigns.json` on launch and every 8 hours; the manual JSON textareas grey out while auto-update is on.
