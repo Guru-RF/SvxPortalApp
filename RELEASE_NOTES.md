@@ -1,5 +1,18 @@
 # Release Notes
 
+## v1.0.15
+
+- **New**: Windows ARM64 build — for Surface Pro X / Snapdragon laptops.
+- **Build**: download filenames are now hyphen-separated (`SVX-Portal-…`) for clean URLs:
+  - `SVX-Portal-AppleSilicon.dmg`
+  - `SVX-Portal-Intel.dmg`
+  - `SVX-Portal-Setup-x64.exe`
+  - `SVX-Portal-Setup-arm64.exe`
+  - `SVX-Portal-x64.AppImage`
+  - `SVX-Portal-arm64.AppImage`
+
+---
+
 ## v1.0.14
 
 - **Build**: dropped version numbers from output filenames so release assets have stable, easy-to-mirror URLs:

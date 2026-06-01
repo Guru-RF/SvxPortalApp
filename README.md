@@ -27,12 +27,14 @@ Built with [Electron](https://www.electronjs.org/), available for **macOS**, **W
 
 Pre-built binaries are available on the [Releases](../../releases) page.
 
-| Platform | Format |
+| Platform | File |
 | --- | --- |
-| macOS (Apple Silicon, M1/M2/M3/M4) | `…-AppleSilicon.dmg` |
-| macOS (Intel) | `…-Intel.dmg` |
-| Windows | `.exe` (NSIS installer, x64) |
-| Linux | `.AppImage` (x64 + ARM64) |
+| macOS (Apple Silicon, M1/M2/M3/M4) | `SVX-Portal-AppleSilicon.dmg` |
+| macOS (Intel) | `SVX-Portal-Intel.dmg` |
+| Windows (x64) | `SVX-Portal-Setup-x64.exe` |
+| Windows (ARM64) | `SVX-Portal-Setup-arm64.exe` |
+| Linux (x64) | `SVX-Portal-x64.AppImage` |
+| Linux (ARM64) | `SVX-Portal-arm64.AppImage` |
 
 > **Note — unsigned builds:**  
 > The current releases are **not code-signed**. macOS will show a Gatekeeper warning the first time you open the app. To bypass it: right-click the `.app` → **Open** → confirm in the dialog. Windows SmartScreen may also warn you. Code signing will be added in a future release.
