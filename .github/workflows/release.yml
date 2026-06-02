@@ -59,6 +59,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Build-time secrets — written from a GitHub secret so the public repo
+      # stays free of tokens. If STREAM_TOKEN isn't set the app builds with
+      # an empty token (works fine for streams that don't require auth).
+      - name: Write secrets.json
+        shell: bash
+        env:
+          STREAM_TOKEN: ${{ secrets.STREAM_TOKEN }}
+        run: |
+          if [ -n "$STREAM_TOKEN" ]; then
+            printf '{"streamToken":"%s"}\n' "$STREAM_TOKEN" > secrets.json
+          fi
+
       # macOS: import the Developer ID cert into an ephemeral keychain.
       - name: Import Developer ID certificate
         if: matrix.os == 'macos-latest'
@@ -66,17 +78,49 @@ jobs:
         with:
           p12-file-base64: ${{ secrets.MAC_CERTIFICATE }}
           p12-password: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+          keychain-password: github-runner-ephemeral
+
+      # The default partition-list `apple-tool:,apple:` is missing `codesign:`,
+      # which caused signing to hang for an hour on the previous identity:
+      # every codesign invocation was waiting on a never-arriving Keychain
+      # Access prompt. Forcing the entry plus a long unlock prevents that.
+      - name: Grant unattended codesign access to private key
+        if: matrix.os == 'macos-latest'
+        run: |
+          KC=$(security list-keychains -d user | head -1 | xargs)
+          echo "Target keychain: $KC"
+          security unlock-keychain -p github-runner-ephemeral "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security set-key-partition-list \
+            -S 'apple-tool:,apple:,codesign:' \
+            -s -k github-runner-ephemeral "$KC"
 
       - name: Verify codesigning identity
         if: matrix.os == 'macos-latest'
         run: security find-identity -v -p codesigning
 
-      - name: Build macOS (signed + notarized)
+      # Pre-flight: hit Apple's notary service with the same credentials
+      # `notarytool submit` will use. Surfaces credential issues in seconds
+      # instead of hanging silently in the submit step later.
+      - name: Pre-flight notarize credentials test
         if: matrix.os == 'macos-latest'
+        timeout-minutes: 3
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "APPLE_ID length: ${#APPLE_ID}"
+          echo "APPLE_TEAM_ID length: ${#APPLE_TEAM_ID}"
+          echo "APPLE_APP_SPECIFIC_PASSWORD length: ${#APPLE_APP_SPECIFIC_PASSWORD}"
+          time xcrun notarytool history \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" 2>&1 | head -30
+
+      - name: Build macOS (signed only — notarize comes after)
+        if: matrix.os == 'macos-latest'
+        timeout-minutes: 15
         run: npm run ${{ matrix.script }} -- --publish never
 
       - name: Rename macOS DMGs to user-friendly names
@@ -95,6 +139,52 @@ jobs:
           # Drop blockmaps — only used by electron-updater, which we don't ship
           rm -f *.blockmap
           ls -la
+
+      # electron-builder's notarize wait used to hang up to an hour. Drive
+      # notarytool ourselves so we see progress and have a tight timeout.
+      # A brand-new team's queue is sticky for ~55-70 min per submission;
+      # 90 min covers worst-case. continue-on-error so we still ship an
+      # un-stapled DMG (Gatekeeper's online check still works) if a single
+      # submission misses the window.
+      - name: Notarize and staple DMGs (parallel notarytool)
+        if: matrix.os == 'macos-latest'
+        timeout-minutes: 90
+        continue-on-error: true
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -e
+          shopt -s nullglob
+          DMGS=(dist/*.dmg)
+          if [ ${#DMGS[@]} -eq 0 ]; then
+            echo "No DMGs found in dist/ — nothing to notarize." >&2
+            exit 1
+          fi
+          notarize_one() {
+            local dmg="$1"
+            local tag="[$(basename "$dmg")]"
+            echo "$tag === Submitting + waiting ==="
+            xcrun notarytool submit "$dmg" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait 2>&1 | sed "s|^|$tag |"
+            echo "$tag === Stapling ==="
+            xcrun stapler staple "$dmg" 2>&1 | sed "s|^|$tag |"
+            xcrun stapler validate "$dmg" 2>&1 | sed "s|^|$tag |"
+          }
+          pids=()
+          for dmg in "${DMGS[@]}"; do
+            notarize_one "$dmg" &
+            pids+=($!)
+          done
+          status=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || status=$?
+          done
+          exit $status
 
       - name: Build (unsigned)
         if: matrix.os != 'macos-latest'

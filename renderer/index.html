@@ -22,7 +22,9 @@
         <span id="status" style="display:none"></span>
       </div>
       <div id="titlebar-controls">
-        <button class="tb-btn" id="btn-ble-quickconnect" title="Reconnect to saved HotSpot" style="display:none">&#x21BB;</button>
+        <button class="update-pill" id="btn-update" style="display:none" title="Open download page">
+          <span id="update-pill-label">Update</span>
+        </button>
         <button class="tb-btn" id="btn-settings" title="Settings">&#9881;</button>
         <button class="tb-btn" id="btn-ontop" title="Always on top">&#8902;</button>
         <button class="tb-btn" id="btn-minimize" title="Minimize">&#8211;</button>
@@ -69,61 +71,31 @@
               <option value="43200">12h</option>
               <option value="86400">1d</option>
             </select>
-          </div>
-
-          <div class="settings-row settings-row-inline">
-            <label>Map</label>
-            <label class="switch" title="Toggle map">
-              <input id="mapToggle" type="checkbox" checked />
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <div class="settings-row settings-row-inline">
-            <label>Dark mode</label>
-            <label class="switch" title="Toggle light/dark">
-              <input id="themeToggle" type="checkbox" />
-              <span class="slider"></span>
-            </label>
-          </div>
-
-          <!-- Bluetooth section -->
-          <div class="settings-section">Bluetooth (HotSpot)</div>
-
-          <div class="settings-row settings-row-inline">
-            <label>Status</label>
-            <span id="ble-status">Not connected</span>
-          </div>
-
-          <div class="settings-row settings-row-inline">
-            <label>HotSpot</label>
-            <div class="ble-controls">
-              <button class="btn-ghost" id="btn-ble-connect">Scan &amp; Connect</button>
-              <button class="btn-ghost" id="btn-ble-disconnect" style="display:none">Disconnect</button>
-              <button class="btn-ghost" id="btn-ble-forget" style="display:none">Forget</button>
-            </div>
-          </div>
-
-          <div class="settings-row">
-            <label for="input-callsign">Callsign</label>
-            <input
-              type="text"
-              id="input-callsign"
-              placeholder="e.g. ON6URE"
-              spellcheck="false"
-              autocomplete="off"
-            />
+            <span class="inline-toggle">
+              <span class="inline-toggle-label">Map</span>
+              <label class="switch" title="Toggle map">
+                <input id="mapToggle" type="checkbox" checked />
+                <span class="slider"></span>
+              </label>
+            </span>
+            <span class="inline-toggle">
+              <span class="inline-toggle-label">Dark</span>
+              <label class="switch" title="Toggle light/dark">
+                <input id="themeToggle" type="checkbox" />
+                <span class="slider"></span>
+              </label>
+            </span>
           </div>
 
           <!-- Connection section -->
           <div class="settings-section">Connection</div>
 
           <div class="settings-row">
-            <label for="input-ws-url">WebSocket URL</label>
+            <label for="input-reflector">Reflector</label>
             <input
               type="text"
-              id="input-ws-url"
-              placeholder="wss://reflector.be.svx.link/"
+              id="input-reflector"
+              placeholder="be.svx.link"
               spellcheck="false"
               autocomplete="off"
             />
@@ -134,16 +106,6 @@
               type="text"
               id="input-app-title"
               placeholder="SVX Portal"
-              spellcheck="false"
-              autocomplete="off"
-            />
-          </div>
-          <div class="settings-row">
-            <label for="input-portal-url">Portal URL</label>
-            <input
-              type="text"
-              id="input-portal-url"
-              placeholder="https://portal.be.svx.link/"
               spellcheck="false"
               autocomplete="off"
             />
@@ -182,58 +144,41 @@
       </div>
     </div>
 
-    <!-- ── Bluetooth device picker modal ── -->
-    <div id="ble-picker-overlay" class="hidden" role="dialog" aria-modal="true">
-      <div id="ble-picker-modal">
-        <div id="settings-modal-header">
-          <span class="settings-modal-title">Choose HotSpot</span>
-          <button class="tb-btn close" id="btn-ble-pick-cancel" title="Cancel">&#10005;</button>
-        </div>
-        <div class="settings-modal-body">
-          <div id="ble-picker-list">
-            <span class="muted">Scanning&hellip;</span>
-          </div>
-        </div>
-        <div class="settings-actions">
-          <button class="btn-ghost" id="btn-ble-pick-cancel-2">Cancel</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── DTMF bar (BLE HotSpot control) — only visible when connected ── -->
-    <div id="dtmf-bar" style="display:none">
-      <span id="dtmf-callsign-dot"></span>
-      <span id="dtmf-callsign">—</span>
-      <div id="signal-meter" style="display:none" title="4G signal">
-        <span class="bar"></span>
-        <span class="bar"></span>
-        <span class="bar"></span>
-        <span class="bar"></span>
-      </div>
+    <!-- ── Listen bar (live audio) — populated by player.js when stream is available ── -->
+    <div id="streamPlayer" style="display:none">
+      <span class="streamLabel">Listen</span>
+      <button
+        type="button"
+        class="streamMute"
+        id="streamMute"
+        title="Mute"
+        aria-pressed="false"
+      >
+        <svg class="streamMuteIco" viewBox="0 0 24 24" aria-hidden="true">
+          <!-- Speaker (default) -->
+          <path
+            class="streamIcoOn"
+            d="M3 10v4h4l5 5V5L7 10H3zm13.5 2a4.5 4.5 0 0 0-2.5-4.03v8.06A4.5 4.5 0 0 0 16.5 12z"
+          />
+          <!-- Muted speaker (hidden by default) -->
+          <g class="streamIcoOff" style="display:none">
+            <path d="M3 10v4h4l5 5V5L7 10H3z" />
+            <path d="M16 9l5 5m0-5l-5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" />
+          </g>
+        </svg>
+      </button>
       <input
-        id="dtmf-input"
-        type="text"
-        placeholder="DTMF (0-9, A-D, *, #)"
-        maxlength="64"
-        spellcheck="false"
-        autocomplete="off"
+        type="range"
+        class="streamVolume"
+        id="streamVolume"
+        min="0"
+        max="1"
+        step="0.01"
+        value="1"
+        title="Volume"
+        aria-label="Volume"
       />
-      <button class="btn-primary" id="dtmf-send">Send</button>
-      <button class="btn-ghost dtmf-quick" data-dtmf="9*#" title="List talkgroups">TG</button>
-      <button class="btn-ghost dtmf-quick" data-dtmf="*#" title="Status">Status</button>
-      <button class="btn-ghost dtmf-quick" data-dtmf="D911#" title="Announce IP address">IP</button>
-      <button class="btn-ghost dtmf-quick" data-dtmf="D1#" title="Parrot test">Parrot</button>
-      <select id="ble-cmd-select" title="HotSpot commands">
-        <option value="" disabled selected>&#9881; Command…</option>
-        <option value="svxlink-start">SVXLink Start</option>
-        <option value="svxlink-stop">SVXLink Stop</option>
-        <option value="svxlink-restart">SVXLink Restart</option>
-        <option value="4g-enable">4G Enable</option>
-        <option value="4g-disable">4G Disable</option>
-        <option value="reboot">Reboot</option>
-        <option value="poweroff">Power Off</option>
-      </select>
-      <span id="dtmf-response"></span>
+      <span class="streamBtns" id="streamBtns"></span>
     </div>
 
     <!-- ── Main content ── -->
@@ -265,30 +210,15 @@
       <div class="footer-row">
         <span>
           Concept by
-          <a
-            href="https://www.qrz.com/db/ON8ST"
-            target="_blank"
-            rel="noopener noreferrer"
-            >ON8ST</a
-          >, coded by
-          <a
-            href="https://www.qrz.com/db/ON6URE"
-            target="_blank"
-            rel="noopener noreferrer"
-            >ON6URE</a
-          >, on top of svxreflector by
-          <a
-            href="https://www.qrz.com/db/SM0SVX"
-            target="_blank"
-            rel="noopener noreferrer"
-            >SM0SVX</a
-          >
+          <a href="https://www.qrz.com/db/ON8ST" target="_blank" rel="noopener noreferrer">ON8ST</a>,
+          coded by
+          <a href="https://www.qrz.com/db/ON6URE" target="_blank" rel="noopener noreferrer">ON6URE</a>,
+          on top of svxreflector by
+          <a href="https://www.qrz.com/db/SM0SVX" target="_blank" rel="noopener noreferrer">SM0SVX</a>
         </span>
         <span>
           Hosted by
-          <a href="https://rf.guru" target="_blank" rel="noopener noreferrer"
-            >rf.guru</a
-          >
+          <a href="https://rf.guru" target="_blank" rel="noopener noreferrer">rf.guru</a>
         </span>
       </div>
     </footer>
@@ -301,5 +231,6 @@
       crossorigin="anonymous"
     ></script>
     <script src="./app.js"></script>
+    <script src="./player.js"></script>
   </body>
 </html>

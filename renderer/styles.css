@@ -17,6 +17,7 @@
   --panel: #f8fafc;
   --accent: #a52a2a;
   --hotspot: #ffa502;
+  --virtual: #3b82f6;
 
   --overlap-ring: #e7e2c6;
   --spider-ring: rgba(30, 41, 59, 0.35);
@@ -283,220 +284,166 @@ body {
   color: var(--fg);
 }
 
-/* ---------- DTMF bar (BLE HotSpot) — shown only when connected ---------- */
-#dtmf-bar {
+
+/* ---------- "Update available" pill in the title bar ---------- */
+.update-pill {
+  background: #d92929;
+  color: #ffffff;
+  border: 0;
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin: 0 6px 0 2px;
+  font: 700 11px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 0.12s;
+}
+.update-pill:hover { background: #b21f1f; }
+
+/* ---------- Listen bar (live audio player) ---------- */
+#streamPlayer {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 6px 12px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  font-size: 13px;
   flex-wrap: wrap;
 }
-
-#dtmf-callsign-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  display: inline-block;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  background: var(--muted);
-  flex-shrink: 0;
-}
-#dtmf-callsign-dot.online {
-  background: var(--ok);
-}
-#dtmf-callsign-dot.offline {
-  background: var(--bad);
-}
-
-#dtmf-callsign {
+#streamPlayer .streamLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 700;
-  font-size: 13px;
-  color: var(--fg);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
   white-space: nowrap;
 }
+#streamPlayer .streamSpeaker {
+  width: 16px;
+  height: 16px;
+  fill: var(--muted);
+}
+#streamPlayer .streamBtns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex: 1;
+}
 
-/* 4G/LTE signal meter (fed by the BLE feed characteristic) */
-#signal-meter {
+/* Mute toggle */
+.streamMute {
   display: inline-flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 14px;
-  width: 18px;
-  flex-shrink: 0;
-  cursor: help;
-}
-#signal-meter .bar {
-  flex: 1;
-  background: var(--border);
-  border-radius: 1px;
-  transition: background 0.2s;
-}
-#signal-meter .bar:nth-child(1) { height: 30%; }
-#signal-meter .bar:nth-child(2) { height: 55%; }
-#signal-meter .bar:nth-child(3) { height: 80%; }
-#signal-meter .bar:nth-child(4) { height: 100%; }
-
-/* Light up bars from the left up to data-level */
-#signal-meter[data-level="1"] .bar:nth-child(-n+1),
-#signal-meter[data-level="2"] .bar:nth-child(-n+2),
-#signal-meter[data-level="3"] .bar:nth-child(-n+3),
-#signal-meter[data-level="4"] .bar:nth-child(-n+4) {
-  background: var(--ok);
-}
-/* Mid-range fairness gets a warm tint */
-#signal-meter[data-level="2"] .bar:nth-child(-n+2) {
-  background: var(--hotspot);
-}
-/* Weak — single bar in warm */
-#signal-meter[data-level="1"] .bar:nth-child(1) {
-  background: var(--hotspot);
-}
-/* Below −110 dBm: red */
-#signal-meter.very-poor .bar:nth-child(1) {
-  background: var(--bad);
-}
-
-#dtmf-input {
-  flex: 1;
-  min-width: 140px;
-  background: var(--bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font: 13px/1.4 "Consolas", "SF Mono", "Monaco", monospace;
-  outline: none;
-  user-select: text;
-}
-#dtmf-input:focus {
-  border-color: var(--ok);
-}
-
-#dtmf-send {
-  padding: 4px 14px;
-  font-size: 13px;
-}
-
-.dtmf-quick {
-  padding: 4px 10px;
-  font-size: 12px;
-}
-
-#ble-cmd-select {
-  padding: 4px 8px;
-  font-size: 12px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   background: transparent;
   color: var(--muted);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 50%;
   cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-#ble-cmd-select:hover {
+.streamMute:hover {
   color: var(--fg);
-  background: rgba(127, 127, 127, 0.08);
+  background: rgba(127, 127, 127, 0.10);
+}
+.streamMute[aria-pressed="true"] {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.streamMuteIco {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
 }
 
-#dtmf-response {
+/* Volume slider */
+.streamVolume {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 999px;
+  outline: none;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.streamVolume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ok);
+  cursor: pointer;
+  border: 0;
+  transition: transform 0.12s;
+}
+.streamVolume::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.streamVolume::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--ok);
+  cursor: pointer;
+  border: 0;
+}
+.streamVolume:disabled,
+.streamVolume.muted {
+  opacity: 0.4;
+}
+#streamPlayer .streamHint {
   font-size: 12px;
   color: var(--muted);
-  min-width: 90px;
-  max-width: 200px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-#dtmf-response.ok {
-  color: var(--ok);
-}
-#dtmf-response.bad {
-  color: var(--bad);
-}
-
-/* BLE device picker modal — same overlay/modal styling as settings */
-#ble-picker-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 8000;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
+.streamBtn {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-}
-#ble-picker-overlay.hidden { display: none; }
-#ble-picker-modal {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  width: min(420px, 90vw);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-#ble-picker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ble-picker-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
+  gap: 5px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
   color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s;
-  text-align: left;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
 }
-.ble-picker-item:hover {
-  background: rgba(127, 127, 127, 0.08);
+.streamBtn:hover {
+  background: rgba(127, 127, 127, 0.10);
   border-color: var(--ok);
 }
-.ble-picker-item .muted {
-  font-size: 11px;
+.streamBtn .streamIco {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
 }
-
-/* BLE settings section */
-.ble-controls,
-.ble-commands {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.streamBtn .streamIco svg {
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
 }
-
-.ble-cmd {
-  font-size: 12px;
-  padding: 4px 10px;
+.streamBtn.active {
+  background: var(--ok);
+  color: #fff;
+  border-color: var(--ok);
 }
-
-#ble-status {
-  font-size: 13px;
-  color: var(--muted);
-}
-#ble-status.connected {
-  color: var(--ok);
-}
-#ble-status.connecting {
-  color: var(--hotspot);
-}
-#ble-status.error {
-  color: var(--bad);
-}
-
-/* Clickable TG headers when BLE is connected */
-th.tg.ble-clickable {
-  cursor: pointer;
-}
-th.tg.ble-clickable:hover {
-  background: rgba(127, 127, 127, 0.12);
+[data-theme="dark"] .streamBtn.active {
+  background: var(--ok);
+  color: #0b1220;
 }
 
 /* ---------- Settings section dividers ---------- */
@@ -520,6 +467,18 @@ th.tg.ble-clickable:hover {
 }
 .settings-row-inline label:first-child {
   align-self: center;
+}
+
+/* Compact "Map / Dark" toggles tacked onto the same row as Window */
+.inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 14px;
+}
+.inline-toggle-label {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 #showControls {
@@ -714,7 +673,8 @@ th.tg > span {
 }
 
 .dotOnline,
-.dotOffline {
+.dotOffline,
+.dotVirtual {
   width: 13px;
   height: 13px;
   border-radius: 50%;
@@ -726,6 +686,9 @@ th.tg > span {
 }
 .dotOffline {
   background: var(--bad);
+}
+.dotVirtual {
+  background: var(--virtual);
 }
 
 .tgCheck {
@@ -876,6 +839,9 @@ th.tg {
 .mDot.offline {
   background: var(--bad);
 }
+.mDot.virtual {
+  background: var(--virtual);
+}
 .mDot.talking {
   width: 22px;
   height: 22px;
@@ -946,6 +912,18 @@ footer.site-footer a:visited {
   label.check {
     padding: 3px 7px;
     font-size: 12px;
+  }
+
+  /* Virtual callsigns ("ON6URE/M"): stack parts vertically, hide the slash. */
+  strong.cs.csVirtual {
+    white-space: normal;
+    line-height: 1.05;
+  }
+  strong.cs.csVirtual .csPart {
+    display: block;
+  }
+  strong.cs.csVirtual .csSlash {
+    display: none;
   }
 
   /* Hide Leaflet zoom controls and attribution bar */

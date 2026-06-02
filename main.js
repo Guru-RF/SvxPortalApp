@@ -4,18 +4,36 @@ const fs = require("fs");
 
 let mainWindow;
 let tray = null;
-let preferredBleName = "";
 
 function getSettingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
-// Defaults sourced from env.yaml — update that file and ship a new build to push changes.
-// Users can override via the Settings panel; their saved values take precedence.
+// Build-time secrets — values that need to ship in the build but must not
+// land in the public repo. `secrets.json` is gitignored; see
+// `secrets.example.json` for the expected shape. The file is read once at
+// startup and folded into DEFAULT_SETTINGS so the renderer sees the values
+// like any other config field.
+function loadBuildSecrets() {
+  try {
+    const p = path.join(__dirname, "secrets.json");
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, "utf-8"));
+    }
+  } catch (_) {}
+  return {};
+}
+const BUILD_SECRETS = loadBuildSecrets();
+
+// Single user-facing reflector base. The actual reflector / portal / stream
+// URLs are derived from this — see deriveUrls() below.
+//   "be.svx.link"             → standard DNS SRV style, prepend prefixes
+//   "reflector.be.svx.link"   → leading "reflector." stripped, then same
+//   wss:// or https:// prefix → stripped before derivation
 const DEFAULT_SETTINGS = {
-  wsUrl: "wss://reflector.be.svx.link/",
-  title: "SVX Reflector \u2022 Live",
-  portalUrl: "https://portal.be.svx.link/",
+  reflector: "be.svx.link",
+  title: "SVX Reflector • Live",
+  streamToken: BUILD_SECRETS.streamToken || "",
   autoUpdateInfo: true,
   talkgroupInfo: {
     "4": "4m Repeaters",
@@ -57,20 +75,56 @@ const DEFAULT_SETTINGS = {
   alwaysOnTop: false,
 };
 
+// Strip schemes, trailing slash, and leading "reflector." → base domain.
+function normalizeReflectorBase(input) {
+  return String(input || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^wss?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/^reflector\./i, "");
+}
+
+// Build the three runtime URLs from a base domain like "be.svx.link".
+function deriveUrls(reflector) {
+  const base = normalizeReflectorBase(reflector);
+  if (!base) return null;
+  return {
+    wsUrl: `wss://reflector.${base}/`,
+    streamUrl: `wss://swl.${base}/`,
+    portalUrl: `https://portal.${base}/`,
+  };
+}
+
+// Try to back-fill reflector from a legacy saved wsUrl ("wss://reflector.X/").
+function reflectorFromWsUrl(wsUrl) {
+  const m = String(wsUrl || "").match(/^wss?:\/\/(?:reflector\.)?([^\/]+)/i);
+  return m ? m[1] : "";
+}
+
 function loadSettings() {
   try {
     const p = getSettingsPath();
+    let saved = {};
     if (fs.existsSync(p)) {
-      const saved = JSON.parse(fs.readFileSync(p, "utf-8"));
-      // Treat empty objects as "not set" so defaults are used instead
+      saved = JSON.parse(fs.readFileSync(p, "utf-8"));
       if (!saved.talkgroupInfo || !Object.keys(saved.talkgroupInfo).length)
         delete saved.talkgroupInfo;
       if (!saved.callsignInfo || !Object.keys(saved.callsignInfo).length)
         delete saved.callsignInfo;
-      return { ...DEFAULT_SETTINGS, ...saved };
     }
+    const merged = { ...DEFAULT_SETTINGS, ...saved };
+    // Migrate older settings: if reflector is missing but wsUrl is present,
+    // recover the base from it.
+    if (!merged.reflector && merged.wsUrl) {
+      merged.reflector = reflectorFromWsUrl(merged.wsUrl);
+    }
+    // Always derive the three URLs at runtime so the renderer never has to.
+    const derived = deriveUrls(merged.reflector);
+    if (derived) Object.assign(merged, derived);
+    return merged;
   } catch (_) {}
-  return { ...DEFAULT_SETTINGS };
+  return { ...DEFAULT_SETTINGS, ...(deriveUrls(DEFAULT_SETTINGS.reflector) || {}) };
 }
 
 function saveSettings(settings) {
@@ -99,85 +153,16 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
   mainWindow.setMenuBarVisibility(false);
 
-  // Auto-open DevTools when running unpackaged (i.e. `npm start`)
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  // Trigger BLE auto-reconnect after page loads, with synthetic user gesture
-  // so navigator.bluetooth.requestDevice() is allowed without a click.
-  mainWindow.webContents.once("did-finish-load", () => {
-    mainWindow.webContents.executeJavaScript(
-      "typeof window.bleAutoReconnectOnStartup === 'function' && window.bleAutoReconnectOnStartup();",
-      true /* userGesture */
-    ).catch(() => {});
-  });
-
-  // Route external links (target="_blank" and window.open) to the system browser
+  // External links open in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("http://") || url.startsWith("https://")) {
       shell.openExternal(url);
     }
     return { action: "deny" };
-  });
-
-  // Web Bluetooth device picker:
-  //   - If a previously-paired device name matches a discovery, auto-pick it.
-  //   - Otherwise forward the live device list to the renderer so the user
-  //     can choose. Renderer responds via ble:pick-device / ble:cancel-pick.
-  //   - 15s overall scan timeout so the renderer never hangs if no devices
-  //     appear and the user hasn't cancelled.
-  let bleScanTimeout = null;
-  let blePickCallback = null;
-  const finishBleScan = (deviceId) => {
-    if (bleScanTimeout) { clearTimeout(bleScanTimeout); bleScanTimeout = null; }
-    const cb = blePickCallback;
-    blePickCallback = null;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("ble:close-picker");
-    }
-    if (cb) try { cb(deviceId || ""); } catch (_) {}
-  };
-
-  mainWindow.webContents.on("select-bluetooth-device", (event, devices, callback) => {
-    event.preventDefault();
-    blePickCallback = callback;
-
-    // Auto-pick if we recognize a previously-paired device by name
-    const preferred = preferredBleName;
-    if (preferred) {
-      const exact = devices.find((d) => d.deviceName === preferred);
-      if (exact) {
-        finishBleScan(exact.deviceId);
-        return;
-      }
-    }
-
-    // Otherwise show the picker in the renderer with the current list
-    const list = devices.map((d) => ({
-      id: d.deviceId,
-      name: d.deviceName || "(unnamed)",
-    }));
-    mainWindow.webContents.send("ble:devices", list);
-
-    // Arm a single overall timeout the first time we see this scan
-    if (!bleScanTimeout) {
-      bleScanTimeout = setTimeout(() => finishBleScan(""), 15000);
-    }
-  });
-
-  ipcMain.on("ble:pick-device", (_event, deviceId) => finishBleScan(deviceId));
-  ipcMain.on("ble:cancel-pick", () => finishBleScan(""));
-
-  // Persist Bluetooth device permissions so navigator.bluetooth.getDevices()
-  // can auto-reconnect on next app launch without re-scanning.
-  mainWindow.webContents.session.setDevicePermissionHandler((details) => {
-    if (details.deviceType === "bluetooth") return true;
-    return false;
-  });
-  mainWindow.webContents.session.setPermissionCheckHandler((_wc, permission) => {
-    if (permission === "bluetooth" || permission === "bluetooth-devices") return true;
-    return false;
   });
 
   mainWindow.on("maximize", () => {
@@ -198,7 +183,6 @@ function createTray() {
   try {
     const iconPath = path.join(__dirname, "build", "tray-icon.png");
     const iconData = fs.readFileSync(iconPath);
-    // 32px PNG displayed as 16pt on Retina (scaleFactor 2)
     const icon = nativeImage.createFromBuffer(iconData, {
       width: 16, height: 16, scaleFactor: 2.0,
     });
@@ -209,9 +193,55 @@ function createTray() {
   }
 }
 
+// ── GitHub update check ───────────────────────────────────────────────────────
+// Poll GitHub's "latest release" endpoint at startup and once a day after.
+// Renderer shows a red pill in the title bar; clicking opens the releases page.
+const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_RELEASES_URL =
+  "https://api.github.com/repos/Guru-RF/SvxPortalApp/releases/latest";
+const UPDATE_LANDING_URL =
+  "https://github.com/Guru-RF/SvxPortalApp/releases/latest";
+
+function isNewerVersion(remote, local) {
+  const pa = String(remote).split(".").map((n) => Number(n) || 0);
+  const pb = String(local).split(".").map((n) => Number(n) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const a = pa[i] || 0;
+    const b = pb[i] || 0;
+    if (a !== b) return a > b;
+  }
+  return false;
+}
+
+async function checkForUpdates() {
+  try {
+    const res = await fetch(UPDATE_RELEASES_URL, {
+      headers: {
+        "User-Agent": "SVX-Portal-Desktop",
+        "Accept": "application/vnd.github+json",
+      },
+    });
+    if (!res.ok) return;
+    const json = await res.json();
+    const latest = String(json.tag_name || "").replace(/^v/, "").trim();
+    if (!latest) return;
+    if (!isNewerVersion(latest, app.getVersion())) return;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("update:available", {
+        version: latest,
+        url: UPDATE_LANDING_URL,
+      });
+    }
+  } catch (_) {}
+}
+
+function startUpdateChecking() {
+  setTimeout(checkForUpdates, 5000);
+  setInterval(checkForUpdates, UPDATE_CHECK_INTERVAL_MS);
+}
+
 app.whenReady().then(() => {
-  // Use our icon in the dock during development (electron-builder handles the
-  // packaged app, but `npm start` shows the default Electron icon otherwise).
   if (process.platform === "darwin" && app.dock) {
     try {
       const dockIcon = nativeImage.createFromPath(
@@ -222,22 +252,27 @@ app.whenReady().then(() => {
   }
   createWindow();
   createTray();
+  startUpdateChecking();
 });
 
 app.on("window-all-closed", () => {
   app.quit();
 });
 
-// Settings
+// ── Settings IPC ──────────────────────────────────────────────────────────────
 ipcMain.handle("settings:load", () => loadSettings());
-ipcMain.handle("settings:defaults", () => ({ ...DEFAULT_SETTINGS }));
-
+ipcMain.handle("settings:defaults", () => {
+  const out = { ...DEFAULT_SETTINGS };
+  const derived = deriveUrls(out.reflector);
+  if (derived) Object.assign(out, derived);
+  return out;
+});
 ipcMain.handle("settings:save", (_event, settings) => {
   const current = loadSettings();
   saveSettings({ ...current, ...settings });
 });
 
-// Window controls
+// ── Window controls ───────────────────────────────────────────────────────────
 ipcMain.handle("window:toggleOnTop", () => {
   const next = !mainWindow.isAlwaysOnTop();
   mainWindow.setAlwaysOnTop(next);
@@ -246,10 +281,8 @@ ipcMain.handle("window:toggleOnTop", () => {
   saveSettings(s);
   return next;
 });
-
 ipcMain.handle("window:getOnTop", () => mainWindow.isAlwaysOnTop());
 ipcMain.handle("window:isMaximized", () => mainWindow.isMaximized());
-
 ipcMain.on("window:minimize", () => mainWindow.minimize());
 ipcMain.on("window:maximize", () => {
   if (mainWindow.isMaximized()) mainWindow.unmaximize();
@@ -257,21 +290,18 @@ ipcMain.on("window:maximize", () => {
 });
 ipcMain.on("window:close", () => mainWindow.close());
 
-// BLE preferred device name (set by renderer from localStorage)
-ipcMain.on("ble:preferred-name", (_event, name) => {
-  preferredBleName = name || "";
+// ── Update pill IPC ───────────────────────────────────────────────────────────
+ipcMain.on("update:open", () => {
+  shell.openExternal(UPDATE_LANDING_URL).catch(() => {});
 });
 
-// Tray ticker — macOS: menu bar text, Windows: balloon notifications
+// ── Tray ticker ───────────────────────────────────────────────────────────────
+// macOS: live menu-bar text. Windows: balloon notifications.
 let prevTalkerText = "";
 ipcMain.on("tray:talkers", (_event, text) => {
   if (!tray) return;
-
-  if (process.platform === "darwin") {
-    tray.setTitle(text || "");
-  }
+  if (process.platform === "darwin") tray.setTitle(text || "");
   tray.setToolTip(text ? `Talking: ${text}` : "SVX Portal");
-
   if (process.platform === "win32" && text && text !== prevTalkerText) {
     tray.displayBalloon({
       title: "SVX Portal",

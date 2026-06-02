@@ -1,5 +1,17 @@
 # Release Notes
 
+## v1.0.16
+
+- **Listen** — live per-talkgroup audio streaming from the SVX reflector (Opus over WebSocket).
+- **Single Reflector field** in Settings — the WebSocket / portal / stream URLs are derived from one base domain.
+- **AI-detected ("virtual") nodes** rendered with blue dots in the table and map markers, matching the online portal.
+- **Update pill** in the title bar — appears when a newer GitHub release is published.
+- **Volume + mute** controls in the Listen bar.
+- Bluetooth / HotSpot remote-control features moved to a separate app.
+- **macOS signing** moved to the Dielectricum Developer ID; notarization is now driven by `notarytool` directly so we get progress logs and tighter timeouts.
+
+---
+
 ## v1.0.15
 
 - **New**: Windows ARM64 build — for Surface Pro X / Snapdragon laptops.

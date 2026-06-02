@@ -16,7 +16,9 @@ Built with [Electron](https://www.electronjs.org/), available for **macOS**, **W
 - Dark / light theme toggle
 - Map can be hidden so the node table fills the full window
 - **macOS**: active talkers appear as a live ticker in the system menu bar
-- **HotSpot remote control over Bluetooth LE** — send DTMF, run system commands (SVXLink start/stop, 4G enable/disable, reboot, poweroff), and view the live 4G signal meter directly from the app
+- **Listen** — live per-talkgroup audio streaming from the SVX reflector (Opus over WebSocket, decoded with WebCodecs)
+- Auto-update of talkgroup / callsign info from a configurable Portal URL on launch and every 8 hours
+- Built-in update check — title-bar pill appears when a newer GitHub release is published
 - Configurable WebSocket URL, app title, talkgroup labels, and callsign info via built-in settings
 - Custom frameless window with minimize / maximize / always-on-top controls
 - Settings and display preferences persist between sessions
@@ -36,8 +38,24 @@ Pre-built binaries are available on the [Releases](../../releases) page.
 | Linux (x64) | `SVX-Portal-x64.AppImage` |
 | Linux (ARM64) | `SVX-Portal-arm64.AppImage` |
 
-> **Note — unsigned builds:**  
-> The current releases are **not code-signed**. macOS will show a Gatekeeper warning the first time you open the app. To bypass it: right-click the `.app` → **Open** → confirm in the dialog. Windows SmartScreen may also warn you. Code signing will be added in a future release.
+### Signing status per platform
+
+- **macOS** — signed with a Developer ID certificate and notarized by Apple. Opens cleanly from the DMG; no Gatekeeper prompt.
+- **Linux** — `.AppImage` doesn't use OS code signing; runs as-is once you mark it executable (`chmod +x`).
+- **Windows** — **not code-signed.** Commercial code-signing certificates require either a hardware token or paid managed-signing service, which doesn't make sense for a free / non-commercial radio utility. You can install and run the app safely, you just need to click past a one-time SmartScreen warning.
+
+### Bypassing Windows SmartScreen
+
+When you double-click the installer for the first time, Windows shows:
+
+> **Windows protected your PC** — Microsoft Defender SmartScreen prevented an unrecognised app from starting.
+
+To run it anyway:
+
+1. Click **More info** (small link, easy to miss).
+2. Click **Run anyway**.
+
+You only need to do this **once per installed version**. After the app is installed, launching it from the Start menu doesn't trigger the warning again. Your antivirus may also flag it briefly — that's the same root cause (no publisher signature) and not an actual malware detection.
 
 ---
 
@@ -73,7 +91,10 @@ All app configuration lives behind the **gear icon ⚙ in the title bar of the a
 | --- | --- |
 | WebSocket URL | The `wss://` address of your SVX Reflector |
 | App Title | Title shown in the window and menu bar |
-| TG Info JSON | Map of talkgroup IDs to human-readable names |
+| Listen Stream | The `wss://` address of the live audio stream (default `wss://swl.be.svx.link/`) |
+| Portal URL | The `https://` Portal that hosts `/talkgroups.json` and `/callsigns.json` (default `https://portal.be.svx.link/`) |
+| Auto-update | If enabled, TG & Callsign info refresh from the Portal on launch and every 8 hours |
+| TG Info JSON | Map of talkgroup IDs to human-readable names (used when auto-update is off) |
 | Callsign Info JSON | Map of callsigns to frequency / CTCSS / sysop info shown in tooltips |
 
 The **Restore Defaults** button reloads the factory values bundled with this build.  
@@ -81,24 +102,9 @@ Display preferences (theme, map, filters, window size) are saved automatically.
 
 ---
 
-## Connecting to a HotSpot over Bluetooth
+## Listening to talkgroups
 
-> **You do not need to pair the HotSpot in your OS Bluetooth settings.** All discovery and connection happens inside the app.
-
-What you do need:
-
-1. **Bluetooth turned on** on the computer running the app.
-2. The HotSpot powered on and within range.
-
-To connect:
-
-1. Click the **gear icon ⚙ in the title bar** to open Settings.
-2. In the **Bluetooth (HotSpot)** section, click **Scan & Connect**.
-3. If a single HotSpot is found and remembered from a previous session, it auto-connects. Otherwise, a picker lists all discovered HotSpots — click the one you want.
-4. The first time you connect to a device, it's saved automatically. The next app launch reconnects in the background; no clicks needed.
-5. Use **Forget** in Settings to clear the remembered device.
-
-When connected, a control bar appears below the title bar with a DTMF field, quick buttons (TG, Status, IP, Parrot), a 4G signal meter, and a Commands dropdown for system-level actions on the HotSpot.
+When the **Listen Stream** is reachable, a "Listen" bar appears below the title bar with one button per talkgroup the stream is currently distributing. Click a button to start listening; click again to stop. Only one talkgroup plays at a time — switching is a single click. Audio is Opus over WebSocket, decoded locally with the browser's WebCodecs API and played through a small jitter buffer.
 
 ---
 

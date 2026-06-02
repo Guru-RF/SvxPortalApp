@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -18,7 +18,9 @@
       "preload.js",
       "renderer/**/*",
       "build/tray-icon.png",
-      "build/icon.png"
+      "build/icon.png",
+      "build/entitlements.mac.plist",
+      "secrets.json"
     ],
     "mac": {
       "target": [
@@ -30,16 +32,12 @@
       "artifactName": "SVX-Portal-${arch}.${ext}",
       "category": "public.app-category.utilities",
       "icon": "build/icon.icns",
-      "identity": "BVBA WeePee (PTFT4U8MF9)",
+      "identity": "Dielectricum (C4KY27CT2C)",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "notarize": true,
-      "extendInfo": {
-        "NSBluetoothAlwaysUsageDescription": "SVX Portal connects to your SVX HotSpot over Bluetooth Low Energy to send DTMF commands and read status.",
-        "NSBluetoothPeripheralUsageDescription": "SVX Portal connects to your SVX HotSpot over Bluetooth Low Energy to send DTMF commands and read status."
-      }
+      "notarize": false
     },
     "win": {
       "target": [

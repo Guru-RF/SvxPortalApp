@@ -111,11 +111,10 @@ const mapToggleEl = document.getElementById("mapToggle");
 // Title bar + settings
 const titlebarStatusEl = document.getElementById("titlebar-status");
 const settingsPanelEl = document.getElementById("settings-overlay");
-const inputWsUrl = document.getElementById("input-ws-url");
+const inputReflector = document.getElementById("input-reflector");
 const inputAppTitle = document.getElementById("input-app-title");
 const inputTgInfo = document.getElementById("input-tg-info");
 const inputCsInfo = document.getElementById("input-cs-info");
-const inputPortalUrl = document.getElementById("input-portal-url");
 const inputAutoUpdateInfo = document.getElementById("input-auto-update-info");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -171,6 +170,12 @@ function isRepeater(callsign) {
   return String(callsign || "")
     .toUpperCase()
     .startsWith("ON0");
+}
+
+// Virtual callsigns (AI audio-detection on a repeater) contain a "/".
+// They have no real session, so we treat them as always online.
+function isVirtual(callsign) {
+  return String(callsign || "").includes("/");
 }
 
 function toNumber(v) {
@@ -738,9 +743,14 @@ function setTalkLabel(marker, callsign, enabled) {
 function setRepeaterStyle(marker, node) {
   const accent = cssVar("--accent", "#A52A2A");
   const ok = cssVar("--ok", "#35c48d");
+  const virtual = cssVar("--virtual", "#3b82f6");
   const muted = "rgba(148,163,184,.55)";
   let color = muted, radius = 5, fillOpacity = 0.3, weight = 1;
-  if (node.online) { color = ok; fillOpacity = 0.55; radius = 6; }
+  if (node.online) {
+    color = node.isVirtual ? virtual : ok;
+    fillOpacity = 0.55;
+    radius = 6;
+  }
   if (node.isTalker) { color = accent; fillOpacity = 1.0; radius = 8; weight = 4; }
   marker.setStyle({ color, fillColor: color, radius, fillOpacity, weight, opacity: 1 });
   setTalkLabel(marker, node.callsign, !!node.isTalker);
@@ -749,7 +759,9 @@ function setRepeaterStyle(marker, node) {
 function setHotspotStyle(marker, node) {
   const accent = cssVar("--accent", "#A52A2A");
   const hs = cssVar("--hotspot", "#FFA502");
-  let color = hs, radius = 6, fillOpacity = node.online ? 0.65 : 0.25, weight = 1;
+  const virtual = cssVar("--virtual", "#3b82f6");
+  let color = node.isVirtual ? virtual : hs;
+  let radius = 6, fillOpacity = node.online ? 0.65 : 0.25, weight = 1;
   if (node.isTalker) { color = accent; radius = 8; fillOpacity = 1.0; weight = 4; }
   marker.setStyle({ color, fillColor: color, radius, fillOpacity, weight, opacity: 1 });
   setTalkLabel(marker, node.callsign, !!node.isTalker);
@@ -894,9 +906,6 @@ function renderStatus() {
     .map((n) => n.callsign)
     .join(" \u2022 ");
   window.api.updateTrayTalkers(talkerText);
-
-  // Update the BLE bar callsign dot (online/offline of user's configured callsign)
-  refreshCallsignDot();
 }
 
 function chooseTalkTg(node) {
@@ -950,9 +959,11 @@ function renderTable() {
 
   const html = rows
     .map(({ n, last }) => {
-      const dot = n.online
-        ? `<span class="dotOnline"></span>`
-        : `<span class="dotOffline"></span>`;
+      const dot = n.isVirtual
+        ? `<span class="dotVirtual"></span>`
+        : n.online
+          ? `<span class="dotOnline"></span>`
+          : `<span class="dotOffline"></span>`;
       const heard = n.isTalker
         ? `<span class="timeNow">Now</span>`
         : last
@@ -980,16 +991,30 @@ function renderTable() {
 
       const loc = formatLocation(n.location || "");
       const mDotText = n.isTalker && talkTg ? String(talkTg) : "";
-      const mDotState = n.online ? "online" : "offline";
+      const mDotState = n.isVirtual
+        ? "virtual"
+        : n.online ? "online" : "offline";
       const mDotTalk = n.isTalker ? " talking" : "";
       const mDotHtml = `<span class="mDot ${mDotState}${mDotTalk}">${escapeHtml(mDotText)}</span>`;
+
+      // Virtual callsigns ("ON6URE/M") get split markup so narrow widths can
+      // stack the parts on two lines and hide the slash to fit the column.
+      const csHtml = n.isVirtual && n.callsign.includes("/")
+        ? n.callsign
+            .split("/")
+            .map((part, idx, arr) =>
+              `<span class="csPart">${escapeHtml(part)}</span>` +
+              (idx < arr.length - 1 ? '<span class="csSlash">/</span>' : "")
+            )
+            .join("")
+        : escapeHtml(n.callsign);
 
       return `
       <tr class="${n.isTalker ? "talkingRow" : ""}">
         <td class="narrow center">${dot}</td>
         <td>
           <span class="csHover" data-cs="${escapeHtml(n.callsign)}">
-            ${mDotHtml}<strong>${escapeHtml(n.callsign)}</strong>
+            ${mDotHtml}<strong class="cs${n.isVirtual ? " csVirtual" : ""}">${csHtml}</strong>
           </span>
         </td>
         <td>${escapeHtml(loc)}</td>
@@ -1031,7 +1056,14 @@ function ensureNodeFromSession(sess) {
     }
   }
 
-  state.nodes.set(cs, { callsign: cs, online: false, isTalker: false, tg, monitoredTGs, location, lat, lon });
+  const virtual = isVirtual(cs);
+  state.nodes.set(cs, {
+    callsign: cs,
+    online: virtual,        // virtual callsigns are always-online
+    isVirtual: virtual,
+    isTalker: false,
+    tg, monitoredTGs, location, lat, lon,
+  });
   state.prevTalker.set(cs, false);
 }
 
@@ -1056,9 +1088,12 @@ function applyNodeUpsert(node) {
     ? node.monitoredTGs.map(Number).filter(Number.isFinite).sort((a, b) => a - b)
     : Array.isArray(prev.monitoredTGs) ? prev.monitoredTGs : [];
 
+  const virtual = isVirtual(cs);
   const merged = {
     ...prev, ...node, callsign: cs,
-    online: !!node.online, isTalker: !!node.isTalker,
+    online: virtual ? true : !!node.online,   // virtual = always online
+    isVirtual: virtual,
+    isTalker: !!node.isTalker,
     tg: Number(node.tg || 0) || 0, monitoredTGs: monitored,
     lat: toNumber(node.lat ?? prev.lat), lon: toNumber(node.lon ?? prev.lon),
     location: (node.location ?? prev.location ?? "").toString(),
@@ -1097,12 +1132,11 @@ function connectWs() {
     setTimeout(connectWs, 3000);
     return;
   }
-
   state.activeWs = ws;
 
   ws.onopen = () => { state.wsOk = true; renderAll(); };
   ws.onclose = () => {
-    if (state.activeWs !== ws) return; // superseded
+    if (state.activeWs !== ws) return;
     state.wsOk = false;
     renderAll();
     setTimeout(connectWs, 3000);
@@ -1149,7 +1183,30 @@ function normalizeCsInfo(obj) {
   return out;
 }
 
+// The three runtime URLs are always derived from `reflector`. We do this
+// in the renderer too (not just main.js) so a stale URL saved in an older
+// settings.json can never poison the connection.
+function ensureDerivedUrls(cfg) {
+  let base = String(cfg.reflector || "")
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^wss?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/^reflector\./i, "");
+  // Recover the base from a legacy wsUrl if reflector is empty
+  if (!base && cfg.wsUrl) {
+    const m = String(cfg.wsUrl).match(/^wss?:\/\/(?:reflector\.)?([^\/]+)/i);
+    if (m) base = m[1];
+  }
+  if (!base) base = "be.svx.link";
+  cfg.reflector = base;
+  cfg.wsUrl     = `wss://reflector.${base}/`;
+  cfg.streamUrl = `wss://swl.${base}/`;
+  cfg.portalUrl = `https://portal.${base}/`;
+}
+
 function applyConfig(cfg) {
+  ensureDerivedUrls(cfg);
   state.cfg = cfg;
   if (titleEl && cfg.title) titleEl.textContent = cfg.title;
   state.tgInfo = normalizeTgInfo(cfg.talkgroupInfo || {});
@@ -1237,9 +1294,8 @@ function openSettings() {
   if (!settingsPanelEl) return;
 
   const cfg = state.cfg || {};
-  if (inputWsUrl) inputWsUrl.value = cfg.wsUrl || "";
+  if (inputReflector) inputReflector.value = cfg.reflector || "";
   if (inputAppTitle) inputAppTitle.value = cfg.title || "";
-  if (inputPortalUrl) inputPortalUrl.value = cfg.portalUrl || "";
   if (inputAutoUpdateInfo) inputAutoUpdateInfo.checked = cfg.autoUpdateInfo !== false;
   if (inputTgInfo) {
     const tg = cfg.talkgroupInfo;
@@ -1252,7 +1308,7 @@ function openSettings() {
   updateInfoEditableState();
 
   settingsPanelEl.classList.remove("hidden");
-  inputWsUrl?.focus();
+  inputReflector?.focus();
 }
 
 // Grey out the TG / Callsign textareas when auto-update is on — the portal
@@ -1283,9 +1339,8 @@ function initSettings() {
 
   document.getElementById("btn-restore-defaults")?.addEventListener("click", async () => {
     const defaults = await window.api.getDefaults();
-    if (inputWsUrl) inputWsUrl.value = defaults.wsUrl || "";
+    if (inputReflector) inputReflector.value = defaults.reflector || "";
     if (inputAppTitle) inputAppTitle.value = defaults.title || "";
-    if (inputPortalUrl) inputPortalUrl.value = defaults.portalUrl || "";
     if (inputAutoUpdateInfo) inputAutoUpdateInfo.checked = defaults.autoUpdateInfo !== false;
     if (inputTgInfo) inputTgInfo.value = defaults.talkgroupInfo && Object.keys(defaults.talkgroupInfo).length
       ? JSON.stringify(defaults.talkgroupInfo, null, 2) : "";
@@ -1298,7 +1353,7 @@ function initSettings() {
   inputAutoUpdateInfo?.addEventListener("change", updateInfoEditableState);
 
   document.getElementById("btn-save-settings")?.addEventListener("click", async () => {
-    const wsUrl = (inputWsUrl?.value || "").trim() || "wss://reflector.be.svx.link/";
+    const reflector = (inputReflector?.value || "").trim() || "be.svx.link";
     const title = (inputAppTitle?.value || "").trim() || "SVX Portal";
 
     let talkgroupInfo = {};
@@ -1319,13 +1374,16 @@ function initSettings() {
       return;
     }
 
-    const portalUrl = (inputPortalUrl?.value || "").trim() || "https://portal.be.svx.link/";
     const autoUpdateInfo = !!inputAutoUpdateInfo?.checked;
 
-    const newCfg = { wsUrl, title, portalUrl, autoUpdateInfo, talkgroupInfo, callsignInfo };
+    // We save reflector only — main.js derives wsUrl / streamUrl / portalUrl
+    // from it in loadSettings.
+    const newCfg = { reflector, title, autoUpdateInfo, talkgroupInfo, callsignInfo };
     await window.api.saveSettings(newCfg);
 
-    applyConfig(newCfg);
+    // Re-read so we get wsUrl / streamUrl / portalUrl derived by main.js
+    const merged = await window.api.loadSettings();
+    applyConfig(merged);
     closeSettings();
 
     // Reconnect WebSocket with new URL
@@ -1338,482 +1396,23 @@ function initSettings() {
   });
 }
 
+// ── Update pill ──────────────────────────────────────────────────────────────
+// Main process polls GitHub once a day and broadcasts when a newer release
+// tag is published. Click → open the releases page in the system browser.
+function initUpdatePill() {
+  const btn = document.getElementById("btn-update");
+  const label = document.getElementById("update-pill-label");
+  window.api.onUpdateAvailable?.((info) => {
+    if (!btn) return;
+    if (label) label.textContent = `v${info.version} available`;
+    btn.title = `New version ${info.version} — click to open ${info.url || "the download page"}`;
+    btn.style.display = "";
+  });
+  btn?.addEventListener("click", () => window.api.openUpdateUrl?.());
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
-// ── BLE HotSpot DTMF / Command client ────────────────────────────────────────
-
-const BLE_SVC_UUID = "6b1d6a10-c50f-4d86-a7f3-7f2a3a1b2c3d";
-const BLE_WRITE_UUID = "6b1d6a11-c50f-4d86-a7f3-7f2a3a1b2c3d";
-const BLE_STATUS_UUID = "6b1d6a12-c50f-4d86-a7f3-7f2a3a1b2c3d";
-const BLE_CMD_UUID = "6b1d6a13-c50f-4d86-a7f3-7f2a3a1b2c3d";
-const BLE_FEED_UUID = "6b1d6a14-c50f-4d86-a7f3-7f2a3a1b2c3d";
-const CALLSIGN_KEY = "svx-app-callsign";
-const BLE_LAST_DEVICE_KEY = "svx-app-ble-last-device";
-
-function getSavedDeviceName() {
-  try { return localStorage.getItem(BLE_LAST_DEVICE_KEY) || ""; }
-  catch { return ""; }
-}
-function saveDeviceName(name) {
-  if (!name) return;
-  try { localStorage.setItem(BLE_LAST_DEVICE_KEY, name); } catch {}
-  try { window.api.setPreferredBleName?.(name); } catch {}
-}
-
-const ble = {
-  device: null,
-  writeChar: null,
-  statusChar: null,
-  cmdChar: null,
-  feedChar: null,
-  userDisconnected: false,
-  reconnectTimer: null,
-  reconnectAttempt: 0,
-  keepaliveTimer: null,
-};
-
-function getUserCallsign() {
-  try { return (localStorage.getItem(CALLSIGN_KEY) || "").toUpperCase().trim(); }
-  catch { return ""; }
-}
-function setUserCallsign(cs) {
-  try { localStorage.setItem(CALLSIGN_KEY, cs.toUpperCase().trim()); } catch {}
-}
-
-function refreshCallsignDot() {
-  const dotEl = document.getElementById("dtmf-callsign-dot");
-  const csEl = document.getElementById("dtmf-callsign");
-  const cs = getUserCallsign();
-  if (csEl) csEl.textContent = cs || "(no callsign set)";
-  if (!dotEl) return;
-  if (!cs) { dotEl.className = ""; return; }
-  const node = state.nodes.get(cs);
-  dotEl.className = node?.online ? "online" : "offline";
-}
-
-function setBleStatus(text, cls) {
-  const el = document.getElementById("ble-status");
-  if (el) {
-    // When idle / disconnected, hint which device we'll reconnect to
-    if (!cls && text === "Not connected") {
-      const saved = getSavedDeviceName();
-      el.textContent = saved ? `Not connected (last: ${saved})` : "Not connected";
-    } else {
-      el.textContent = text;
-    }
-    el.className = cls || "";
-  }
-  const connected = cls === "connected";
-
-  // Title bar quick-reconnect button: show only when disconnected + we have a saved device
-  const quick = document.getElementById("btn-ble-quickconnect");
-  if (quick) {
-    const saved = getSavedDeviceName();
-    quick.style.display = !connected && saved ? "" : "none";
-    quick.title = saved ? `Reconnect to ${saved}` : "Reconnect";
-  }
-
-  // DTMF bar: only visible when connected
-  const bar = document.getElementById("dtmf-bar");
-  if (bar) bar.style.display = connected ? "" : "none";
-
-  // Connect/Disconnect/Forget + command row toggles in settings
-  const connectBtn = document.getElementById("btn-ble-connect");
-  const disconnectBtn = document.getElementById("btn-ble-disconnect");
-  const forgetBtn = document.getElementById("btn-ble-forget");
-  const cmdRow = document.getElementById("ble-cmd-row");
-  if (connectBtn) connectBtn.style.display = connected ? "none" : "";
-  if (disconnectBtn) disconnectBtn.style.display = connected ? "" : "none";
-  if (forgetBtn) forgetBtn.style.display = !connected && getSavedDeviceName() ? "" : "none";
-  if (cmdRow) cmdRow.style.display = connected ? "" : "none";
-
-  if (connected) refreshCallsignDot();
-
-  // TG headers become clickable-to-send when BLE is connected
-  document.querySelectorAll("th.tg[data-tg]").forEach((th) => {
-    th.classList.toggle("ble-clickable", connected);
-  });
-}
-
-// 4G/LTE signal meter — fed by the BLE feed characteristic.
-// Buckets per Analog-HotSPOT-SVXLink/BLE.md (modem RSSI, not LTE RSRP):
-//   ≥ −70   excellent (4 bars)
-//   −85..−70 good      (3 bars)
-//   −100..−85 fair     (2 bars)
-//   −110..−100 weak    (1 bar)
-//   <−110   very poor  (1 bar, red tint)
-function updateSignalMeter(sg) {
-  const meter = document.getElementById("signal-meter");
-  if (!meter) return;
-  if (sg === "" || sg == null) {
-    meter.style.display = "none";
-    return;
-  }
-  const dbm = Number(sg);
-  if (!Number.isFinite(dbm)) {
-    meter.style.display = "none";
-    return;
-  }
-  let level, label;
-  if (dbm >= -70) { level = 4; label = "excellent"; }
-  else if (dbm >= -85) { level = 3; label = "good"; }
-  else if (dbm >= -100) { level = 2; label = "fair"; }
-  else if (dbm >= -110) { level = 1; label = "weak"; }
-  else { level = 1; label = "very poor"; }
-  meter.style.display = "";
-  meter.dataset.level = String(level);
-  meter.classList.toggle("very-poor", dbm < -110);
-  meter.title = `4G signal: ${dbm} dBm (${label})`;
-}
-
-function setDtmfResponse(text, cls) {
-  const el = document.getElementById("dtmf-response");
-  if (!el) return;
-  el.textContent = text || "";
-  el.className = cls || "";
-}
-
-// Build characteristics + subscriptions for an already-connected device.
-async function bleSetupCharacteristics(device) {
-  const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
-  const service = await server.getPrimaryService(BLE_SVC_UUID);
-  const writeChar = await service.getCharacteristic(BLE_WRITE_UUID);
-  const statusChar = await service.getCharacteristic(BLE_STATUS_UUID);
-
-  // Optional characteristics — older hotspots may not expose them
-  let cmdChar = null;
-  try { cmdChar = await service.getCharacteristic(BLE_CMD_UUID); } catch (_) {}
-  let feedChar = null;
-  try { feedChar = await service.getCharacteristic(BLE_FEED_UUID); } catch (_) {}
-
-  await statusChar.startNotifications();
-  statusChar.addEventListener("characteristicvaluechanged", (e) => {
-    const text = new TextDecoder().decode(e.target.value);
-    const isErr = text.startsWith("err");
-    setDtmfResponse(text, isErr ? "bad" : "ok");
-  });
-
-  if (feedChar) {
-    await feedChar.startNotifications();
-    feedChar.addEventListener("characteristicvaluechanged", (e) => {
-      const text = new TextDecoder().decode(e.target.value);
-      try {
-        const data = JSON.parse(text);
-        updateSignalMeter(data.sg);
-      } catch (_) {
-        // Malformed payload — ignore
-      }
-    });
-  } else {
-    // No feed support → hide the meter
-    updateSignalMeter("");
-  }
-
-  ble.device = device;
-  ble.writeChar = writeChar;
-  ble.statusChar = statusChar;
-  ble.cmdChar = cmdChar;
-  ble.feedChar = feedChar;
-}
-
-function bleClearReconnect() {
-  if (ble.reconnectTimer) {
-    clearTimeout(ble.reconnectTimer);
-    ble.reconnectTimer = null;
-  }
-  ble.reconnectAttempt = 0;
-  ble.reconnecting = false;
-}
-
-function stopKeepalive() {
-  if (ble.keepaliveTimer) {
-    clearInterval(ble.keepaliveTimer);
-    ble.keepaliveTimer = null;
-  }
-}
-
-// Keepalive: every 8s read the status char's CCCD descriptor.
-// This is a real ATT Read Request (not cached browser metadata) — it puts
-// bytes on the BLE link, preventing macOS CoreBluetooth from parking the
-// connection due to inactivity (~15s idle timeout). The server doesn't
-// execute anything — reading a CCCD is purely protocol housekeeping.
-function startKeepalive() {
-  stopKeepalive();
-  ble.keepaliveTimer = setInterval(async () => {
-    const ch = ble.statusChar;
-    const dev = ble.device;
-    if (!dev?.gatt?.connected || !ch) return;
-    try {
-      const cccd = await ch.getDescriptor(
-        "00002902-0000-1000-8000-00805f9b34fb"
-      );
-      await cccd.readValue();
-    } catch (_) {
-      // Connection broke — gattserverdisconnected will trigger the reconnect loop.
-    }
-  }, 8000);
-}
-
-function scheduleReconnect(delayMs) {
-  if (ble.userDisconnected || !ble.device) return;
-  if (ble.reconnectTimer) clearTimeout(ble.reconnectTimer);
-  ble.reconnectTimer = setTimeout(bleTryReconnect, delayMs);
-}
-
-async function bleTryReconnect() {
-  ble.reconnectTimer = null;
-  if (ble.userDisconnected || !ble.device) return;
-  if (ble.reconnecting) return;
-
-  ble.reconnecting = true;
-  ble.reconnectAttempt += 1;
-  const n = ble.reconnectAttempt;
-  setBleStatus("Reconnecting\u2026", "connecting");
-  try {
-    await bleSetupCharacteristics(ble.device);
-    ble.reconnecting = false;
-    ble.reconnectAttempt = 0;
-    if (ble.device.name) saveDeviceName(ble.device.name);
-    setBleStatus(ble.device.name || "Connected", "connected");
-    startKeepalive();
-  } catch (_) {
-    ble.reconnecting = false;
-    // Exponential backoff, capped at 15s. Keep retrying until the user
-    // explicitly disconnects or the hotspot comes back.
-    const delay = Math.min(15000, 1000 * Math.pow(1.6, n - 1));
-    scheduleReconnect(delay);
-  }
-}
-
-// Watchdog: if we think we should be connected but aren't and no reconnect
-// is scheduled/running, revive the loop. Guards against silent state corruption.
-setInterval(() => {
-  if (ble.userDisconnected || !ble.device) return;
-  const connected = !!ble.device.gatt?.connected && !!ble.writeChar;
-  const busy = ble.reconnectTimer || ble.reconnecting;
-  if (!connected && !busy) scheduleReconnect(500);
-}, 15000);
-
-async function bleConnect() {
-  if (!navigator.bluetooth) {
-    setBleStatus("Web Bluetooth not available", "error");
-    return;
-  }
-
-  // Fully tear down any previous state (background auto-reconnect may be running)
-  bleClearReconnect();
-  if (ble.device) {
-    try { if (ble.device.gatt.connected) ble.device.gatt.disconnect(); } catch (_) {}
-    ble.device = null;
-  }
-  ble.writeChar = null;
-  ble.statusChar = null;
-  ble.cmdChar = null;
-  ble.userDisconnected = false;
-
-  try {
-    setBleStatus("Scanning…", "connecting");
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [BLE_SVC_UUID] }],
-    });
-
-    setBleStatus(`Connecting to ${device.name || "device"}…`, "connecting");
-    device.addEventListener("gattserverdisconnected", () => {
-      stopKeepalive();
-      ble.writeChar = null;
-      ble.statusChar = null;
-      ble.cmdChar = null;
-      ble.feedChar = null;
-      updateSignalMeter("");
-      if (ble.userDisconnected) {
-        ble.device = null;
-        setBleStatus("Not connected", "");
-      } else {
-        // Unexpected drop — keep device ref and retry in background
-        setBleStatus("Connection lost, retrying…", "connecting");
-        scheduleReconnect(1000);
-      }
-    });
-
-    await bleSetupCharacteristics(device);
-    if (device.name) saveDeviceName(device.name);
-    setBleStatus(device.name || "Connected", "connected");
-    startKeepalive();
-  } catch (err) {
-    console.error("BLE connect failed:", err);
-    // Cancellation/timeout is not an error state — leave UI ready for retry
-    const msg = err.message || "Connect failed";
-    const cancelled = /cancel/i.test(msg) || err.name === "NotFoundError";
-    setBleStatus(cancelled ? "Not connected" : msg, cancelled ? "" : "error");
-  }
-}
-
-// Try silently reconnecting to a previously-paired HotSpot on app startup.
-// Uses navigator.bluetooth.getDevices(), which returns devices that have
-// previously been granted permission (requires the permission handler in main.js).
-// Called from main.js on startup with synthetic user gesture so requestDevice()
-// is allowed without a click. Only runs if a device was previously paired.
-async function bleAutoReconnectOnStartup() {
-  if (!getSavedDeviceName()) return;
-  await bleConnect();
-}
-window.bleAutoReconnectOnStartup = bleAutoReconnectOnStartup;
-
-async function bleDisconnect() {
-  ble.userDisconnected = true;
-  bleClearReconnect();
-  stopKeepalive();
-  try {
-    if (ble.device && ble.device.gatt.connected) ble.device.gatt.disconnect();
-  } catch (_) {}
-  ble.device = null;
-  ble.writeChar = null;
-  ble.statusChar = null;
-  ble.cmdChar = null;
-  ble.feedChar = null;
-  updateSignalMeter("");
-  setBleStatus("Not connected", "");
-}
-
-async function bleSendDTMF(text) {
-  if (!ble.writeChar) return;
-  const trimmed = (text || "").trim();
-  if (!trimmed) return;
-  if (!/^[0-9A-Da-d*#]+$/.test(trimmed)) {
-    setDtmfResponse("Invalid DTMF chars", "bad");
-    return;
-  }
-  try {
-    const bytes = new TextEncoder().encode(trimmed);
-    await ble.writeChar.writeValueWithoutResponse(bytes);
-    setDtmfResponse(`→ ${trimmed}`, "");
-  } catch (err) {
-    console.error("DTMF send failed:", err);
-    setDtmfResponse(err.message || "Send failed", "bad");
-  }
-}
-
-async function bleSendCommand(cmd) {
-  if (!ble.cmdChar) {
-    setDtmfResponse("Command channel not available", "bad");
-    return;
-  }
-  try {
-    const bytes = new TextEncoder().encode(cmd);
-    await ble.cmdChar.writeValue(bytes);
-    setDtmfResponse(`→ ${cmd}`, "");
-  } catch (err) {
-    console.error("Command send failed:", err);
-    setDtmfResponse(err.message || "Command failed", "bad");
-  }
-}
-
-// ── BLE device picker (driven from main.js select-bluetooth-device) ─────────
-
-function showBlePicker(devices) {
-  const overlay = document.getElementById("ble-picker-overlay");
-  const list = document.getElementById("ble-picker-list");
-  if (!overlay || !list) return;
-  overlay.classList.remove("hidden");
-  if (!devices || !devices.length) {
-    list.innerHTML = '<span class="muted">Scanning…</span>';
-    return;
-  }
-  list.innerHTML = "";
-  for (const d of devices) {
-    const btn = document.createElement("button");
-    btn.className = "ble-picker-item";
-    btn.innerHTML = `<span><strong>${escapeHtml(d.name)}</strong></span><span class="muted">${escapeHtml(d.id.slice(0, 8))}…</span>`;
-    btn.addEventListener("click", () => {
-      window.api.pickBleDevice(d.id);
-      hideBlePicker();
-    });
-    list.appendChild(btn);
-  }
-}
-
-function hideBlePicker() {
-  document.getElementById("ble-picker-overlay")?.classList.add("hidden");
-}
-
-function bleForgetDevice() {
-  if (!confirm("Forget the saved HotSpot? You'll need to scan and pick it again next time.")) return;
-  try { localStorage.removeItem(BLE_LAST_DEVICE_KEY); } catch {}
-  try { window.api.setPreferredBleName?.(""); } catch {}
-  bleDisconnect();
-}
-
-function initBLE() {
-  document.getElementById("btn-ble-connect")?.addEventListener("click", bleConnect);
-  document.getElementById("btn-ble-disconnect")?.addEventListener("click", bleDisconnect);
-  document.getElementById("btn-ble-quickconnect")?.addEventListener("click", bleConnect);
-  document.getElementById("btn-ble-forget")?.addEventListener("click", bleForgetDevice);
-
-  // Picker modal: cancel buttons + backdrop click
-  const cancel = () => { window.api.cancelBlePick?.(); hideBlePicker(); };
-  document.getElementById("btn-ble-pick-cancel")?.addEventListener("click", cancel);
-  document.getElementById("btn-ble-pick-cancel-2")?.addEventListener("click", cancel);
-  document.getElementById("ble-picker-overlay")?.addEventListener("click", (e) => {
-    if (e.target.id === "ble-picker-overlay") cancel();
-  });
-
-  // Live device list updates from main process
-  window.api.onBleDevices?.((list) => showBlePicker(list));
-  window.api.onBleClosePicker?.(() => hideBlePicker());
-
-  // Callsign input: load, save on change, refresh dot
-  const csInput = document.getElementById("input-callsign");
-  if (csInput) {
-    csInput.value = getUserCallsign();
-    csInput.addEventListener("input", () => {
-      setUserCallsign(csInput.value);
-      refreshCallsignDot();
-    });
-  }
-
-  // DTMF input + Send
-  const input = document.getElementById("dtmf-input");
-  const send = document.getElementById("dtmf-send");
-  const doSend = () => {
-    if (!input) return;
-    bleSendDTMF(input.value);
-    input.value = "";
-  };
-  send?.addEventListener("click", doSend);
-  input?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") doSend();
-  });
-
-  // Quick DTMF buttons in the bar
-  document.querySelectorAll(".dtmf-quick").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const code = btn.getAttribute("data-dtmf");
-      if (code) bleSendDTMF(code);
-    });
-  });
-
-  // Command dropdown in DTMF bar (reboot, svxlink-*, 4g-*, poweroff)
-  const cmdSelect = document.getElementById("ble-cmd-select");
-  cmdSelect?.addEventListener("change", () => {
-    const cmd = cmdSelect.value;
-    if (!cmd) return;
-    if (["reboot", "poweroff"].includes(cmd) && !confirm(`Send "${cmd}" to the hotspot?`)) {
-      cmdSelect.selectedIndex = 0;
-      return;
-    }
-    bleSendCommand(cmd);
-    cmdSelect.selectedIndex = 0;
-  });
-
-  // TG header click → send 91<tg># via DTMF
-  theadRow?.addEventListener("click", (e) => {
-    const th = e.target.closest("th[data-tg]");
-    if (!th || !ble.writeChar) return;
-    bleSendDTMF(`91${th.dataset.tg}#`);
-  });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function main() {
   initThemeDefaultDark();
@@ -1821,13 +1420,8 @@ async function main() {
   initMap();
   initTitleBar();
   initSettings();
-  initBLE();
-  try { window.api.setPreferredBleName?.(getSavedDeviceName()); } catch {}
-  // Initial BLE status (auto-reconnect is kicked off from main.js with a
-  // synthetic user gesture after did-finish-load).
-  setBleStatus("Not connected", "");
+  initUpdatePill();
 
-  // Load config from Electron main process (IPC) instead of /config.json
   const cfg = await window.api.loadSettings();
   applyConfig(cfg);
   startPortalAutoUpdate();
