@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.17
+
+- **Fix**: Packaged builds (Windows / Linux / macOS DMG) now ship the stream token, so the Listen feature works out of the box instead of getting stuck at "connecting…". (Previous releases left `secrets.json` empty because the CI secret hadn't been configured.)
+
+---
+
 ## v1.0.16
 
 - **Listen** — live per-talkgroup audio streaming from the SVX reflector (Opus over WebSocket).
