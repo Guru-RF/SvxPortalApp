@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -56,7 +56,7 @@
     "appx": {
       "applicationId": "SVXPortal",
       "displayName": "SVX Portal",
-      "publisherDisplayName": "RF.Guru",
+      "publisherDisplayName": "RF Guru",
       "identityName": "com.gururf.svx-portal-app",
       "backgroundColor": "#0b1220",
       "artifactName": "SVX-Portal-${arch}.${ext}"

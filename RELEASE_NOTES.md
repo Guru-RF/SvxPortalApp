@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.19
+
+- **Fix**: MSIX manifest publisherDisplayName now matches the Partner Center account ("RF Guru" instead of "RF.Guru").
+
+---
+
 ## v1.0.18
 
 - **New Windows MSIX build** — `SVX-Portal-x64.appx` produced alongside the NSIS installer, ready for Microsoft Store submission as a packaged Win32 app.
