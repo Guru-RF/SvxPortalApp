@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -44,10 +44,22 @@
         {
           "target": "nsis",
           "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "appx",
+          "arch": ["x64"]
         }
       ],
       "artifactName": "SVX-Portal-Setup-${arch}.${ext}",
       "icon": "build/icon.png"
+    },
+    "appx": {
+      "applicationId": "SVXPortal",
+      "displayName": "SVX Portal",
+      "publisherDisplayName": "RF.Guru",
+      "identityName": "com.gururf.svx-portal-app",
+      "backgroundColor": "#0b1220",
+      "artifactName": "SVX-Portal-${arch}.${ext}"
     },
     "linux": {
       "target": [

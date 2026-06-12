@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.18
+
+- **New Windows MSIX build** — `SVX-Portal-x64.appx` produced alongside the NSIS installer, ready for Microsoft Store submission as a packaged Win32 app.
+
+---
+
 ## v1.0.17
 
 - **Fix**: Packaged builds (Windows / Linux / macOS DMG) now ship the stream token, so the Listen feature works out of the box instead of getting stuck at "connecting…". (Previous releases left `secrets.json` empty because the CI secret hadn't been configured.)

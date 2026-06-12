@@ -41,7 +41,9 @@ jobs:
           - name: Windows
             os: windows-latest
             script: build:win
-            artifacts: dist/*.exe
+            artifacts: |
+              dist/*.exe
+              dist/*.appx
 
           - name: Linux
             os: ubuntu-latest
