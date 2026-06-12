@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.21
+
+- **Build**: MSIX is now produced for both x64 and ARM64 so the Microsoft Store listing covers Windows on Arm devices (Surface Pro X / Snapdragon laptops).
+
+---
+
 ## v1.0.20
 
 - **Fix**: MSIX `identityName` (`RFGuru.SVXPortal`) and `publisher` (`CN=FBF35633-...`) now match the Partner Center reservation so the package validates and is acceptable for Microsoft Store submission.

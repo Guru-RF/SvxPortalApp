@@ -1,6 +1,6 @@
 {
   "name": "svx-portal-app",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "SVX Reflector Portal - Desktop App for Mac, Windows and Linux",
   "main": "main.js",
   "scripts": {
@@ -47,7 +47,7 @@
         },
         {
           "target": "appx",
-          "arch": ["x64"]
+          "arch": ["x64", "arm64"]
         }
       ],
       "artifactName": "SVX-Portal-Setup-${arch}.${ext}",
