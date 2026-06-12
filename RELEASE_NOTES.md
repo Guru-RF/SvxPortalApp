@@ -1,5 +1,11 @@
 # Release Notes
 
+## v1.0.20
+
+- **Fix**: MSIX `identityName` (`RFGuru.SVXPortal`) and `publisher` (`CN=FBF35633-...`) now match the Partner Center reservation so the package validates and is acceptable for Microsoft Store submission.
+
+---
+
 ## v1.0.19
 
 - **Fix**: MSIX manifest publisherDisplayName now matches the Partner Center account ("RF Guru" instead of "RF.Guru").
